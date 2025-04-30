@@ -1,0 +1,120 @@
+# AWS Security MCP .gitignore
+
+# Environment and credentials
+.env
+.aws/
+aws_config.json
+aws_settings.json
+*credentials*
+*.pem
+*.key
+*.crt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.virtualenv/
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-*
+.project
+.pydevproject
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backups and logs
+*.log
+*.bak
+*.backup
+*.swp
+*~
+
+# BFG report files
+bfg-report/
+
+# Python-specific
+*.egg-info/
+*.egg
+MANIFEST
+
+# Virtual environments
+env.bak/
+venv.bak/
+
+# IDE and editor-specific files
+*.swp
+*.swo
+*~
+
+# Log files
+logs/
+
+# Temporary files
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Secret files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*config.json
+*-config.json
+*_config.json
+secrets.json
+*secret*.json
+*key*.json
+
+# Package specific
+.pyenv
+.python-version
+uv.lock
+.cursor
