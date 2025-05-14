@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/groovybugify-aws-security-mcp-badge.png)](https://mseep.ai/app/groovybugify-aws-security-mcp)
+
 # AWS Security MCP
 
 AWS Security MCP is a Model Context Protocol server that provides a MCP Client like Claude to interact to AWS security services, allowing AI assistants to autonomously inspect and analyze your AWS infrastructure for security issues.
