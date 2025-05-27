@@ -53,12 +53,14 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 def register_tools() -> None:
-    """Register all MCP tools from tool modules."""
-    # Import tools modules
-    logger.info("Registering MCP tools...")
+    """Register selected MCP tools using the registry system."""
+    from aws_security_mcp.tools.registry import should_register_tool
     
-    # List of tool modules to import
+    logger.info("Registering MCP tools with selective registration...")
+    
+    # List of tool modules to import (including our new wrappers)
     tool_modules = [
+        # Core service modules
         "aws_security_mcp.tools.guardduty_tools",
         "aws_security_mcp.tools.securityhub_tools",
         "aws_security_mcp.tools.access_analyzer_tools",
@@ -76,6 +78,25 @@ def register_tools() -> None:
         "aws_security_mcp.tools.ecr_tools",
         "aws_security_mcp.tools.ecs_tools",
         "aws_security_mcp.tools.org_tools",
+        
+        # NEW: Service wrapper modules
+        "aws_security_mcp.tools.wrappers.guardduty_wrapper",
+        "aws_security_mcp.tools.wrappers.ec2_wrapper",
+        "aws_security_mcp.tools.wrappers.load_balancer_wrapper",
+        "aws_security_mcp.tools.wrappers.cloudfront_wrapper",
+        "aws_security_mcp.tools.wrappers.ecs_wrapper",
+        "aws_security_mcp.tools.wrappers.ecr_wrapper",
+        "aws_security_mcp.tools.wrappers.iam_wrapper",
+        "aws_security_mcp.tools.wrappers.lambda_wrapper",
+        "aws_security_mcp.tools.wrappers.access_analyzer_wrapper",
+        "aws_security_mcp.tools.wrappers.resource_tagging_wrapper",
+        "aws_security_mcp.tools.wrappers.org_wrapper",
+        "aws_security_mcp.tools.wrappers.s3_wrapper",
+        "aws_security_mcp.tools.wrappers.route53_wrapper",
+        "aws_security_mcp.tools.wrappers.securityhub_wrapper",
+        "aws_security_mcp.tools.wrappers.shield_wrapper",
+        "aws_security_mcp.tools.wrappers.waf_wrapper",
+        "aws_security_mcp.tools.wrappers.trusted_advisor_wrapper",
     ]
     
     # Import each module and register its tools
@@ -87,11 +108,54 @@ def register_tools() -> None:
         except ImportError as e:
             logger.warning(f"Could not import {module_name}: {e}")
     
-    # Register all tools with the MCP server
+    # Get all available tools
     all_tools = get_all_tools()
+    logger.info(f"Total available tools: {len(all_tools)}")
+    
+    # Apply selective registration using the registry system
+    registered_count = 0
+    excluded_count = 0
+    
     for tool_name, tool_func in all_tools.items():
-        logger.info(f"Registering tool: {tool_name}")
-        mcp.tool(name=tool_name)(tool_func)
+        if should_register_tool(tool_name):
+            logger.info(f"✅ Registering tool: {tool_name}")
+            mcp.tool(name=tool_name)(tool_func)
+            registered_count += 1
+        else:
+            logger.info(f"❌ Excluding tool: {tool_name}")
+            excluded_count += 1
+    
+    # Log registration statistics
+    logger.info(f"📊 Tool Registration Summary:")
+    logger.info(f"  ✅ Registered: {registered_count}")
+    logger.info(f"  ❌ Excluded: {excluded_count}")
+    logger.info(f"  🎯 Tool reduction: {len(all_tools)} → {registered_count}")
+    
+    # Log specific wrapper tools
+    wrapper_tools = [
+        "guardduty_security_operations", "discover_guardduty_operations",
+        "ec2_security_operations", "discover_ec2_operations", 
+        "load_balancer_operations", "discover_load_balancer_operations",
+        "cloudfront_operations", "discover_cloudfront_operations",
+        "ecs_security_operations", "discover_ecs_operations",
+        "ecr_security_operations", "discover_ecr_operations",
+        "iam_security_operations", "discover_iam_operations",
+        "lambda_security_operations", "discover_lambda_operations",
+        "access_analyzer_security_operations", "discover_access_analyzer_operations",
+        "resource_tagging_operations", "discover_resource_tagging_operations",
+        "organizations_security_operations", "discover_organizations_operations",
+        "s3_security_operations", "discover_s3_operations",
+        "route53_security_operations", "discover_route53_operations",
+        "securityhub_security_operations", "discover_securityhub_operations",
+        "shield_security_operations", "discover_shield_operations",
+        "waf_security_operations", "discover_waf_operations",
+        "trusted_advisor_security_operations", "discover_trusted_advisor_operations"
+    ]
+    for wrapper_tool in wrapper_tools:
+        if wrapper_tool in all_tools:
+            logger.info(f"🎁 Wrapper tool available: {wrapper_tool}")
+        else:
+            logger.warning(f"⚠️ Wrapper tool missing: {wrapper_tool}")
 
 # For FastAPI HTTP server mode (not used with Claude Desktop but kept for reference)
 app = FastAPI(

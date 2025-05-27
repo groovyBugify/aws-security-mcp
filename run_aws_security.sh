@@ -18,7 +18,7 @@ export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 # AWS credentials should be set before running
 # You can either set them here as environment variables:
-# export AWS_ACCESS_KEY_ID=accesskey
+# export AWS_ACCESS_KEY_ID=access-key
 # export AWS_SECRET_ACCESS_KEY=secret-key
 # export AWS_DEFAULT_REGION=your_region
 # Or use AWS CLI profiles:
