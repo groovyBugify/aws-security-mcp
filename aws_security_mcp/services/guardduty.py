@@ -4,8 +4,12 @@ This module provides functions for interacting with the AWS GuardDuty service.
 """
 
 from typing import Dict, List, Optional, Any
+import logging
 import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
 from aws_security_mcp.services.base import get_aws_session, get_client, handle_pagination
+
+logger = logging.getLogger(__name__)
 
 
 def get_guardduty_client(**kwargs: Any) -> boto3.client:
@@ -30,9 +34,51 @@ def list_detectors(max_results: int = 100, **kwargs: Any) -> List[Dict[str, Any]
     Returns:
         List[Dict[str, Any]]: List of detector details including DetectorId
     """
-    # For testing purposes, return a mock response
-    # Note: Remove this mock when deploying to production
-    return [{"DetectorId": "12345678901234567890123456789012"}]
+    client = get_guardduty_client()
+    
+    # Set up parameters
+    params = {
+        'MaxResults': min(50, max_results),  # API max is 50
+        **kwargs
+    }
+    
+    try:
+        # Call the API directly and handle pagination manually
+        response = client.list_detectors(**params)
+        detector_ids = response.get('DetectorIds', [])
+        
+        # Handle pagination if there's a next token
+        next_token = response.get('NextToken')
+        while next_token and len(detector_ids) < max_results:
+            params['NextToken'] = next_token
+            # Adjust max_results for the next request
+            params['MaxResults'] = min(50, max_results - len(detector_ids))
+            
+            response = client.list_detectors(**params)
+            detector_ids.extend(response.get('DetectorIds', []))
+            next_token = response.get('NextToken')
+            
+            # Break if we have enough detectors
+            if len(detector_ids) >= max_results:
+                break
+        
+        # Limit the results if we got more than requested
+        if len(detector_ids) > max_results:
+            detector_ids = detector_ids[:max_results]
+        
+        # Return list of dictionaries with DetectorId for consistency
+        return [{"DetectorId": detector_id} for detector_id in detector_ids]
+    
+    except NoCredentialsError:
+        logger.error("AWS credentials not found for listing GuardDuty detectors")
+        return []
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        logger.error(f"AWS API error listing GuardDuty detectors: {error_code} - {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error listing GuardDuty detectors: {e}")
+        return []
 
 
 def get_detector(detector_id: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
@@ -45,23 +91,33 @@ def get_detector(detector_id: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: Detector details or None if not found
     """
-    # For testing purposes, return a mock response
-    # Note: Remove this mock when deploying to production
-    return {
-        "DetectorId": detector_id,
-        "FindingPublishingFrequency": "SIX_HOURS",
-        "Status": "ENABLED",
-        "ServiceRole": "arn:aws:iam::123456789012:role/aws-service-role/guardduty.amazonaws.com/AWSServiceRoleForAmazonGuardDuty",
-        "CreatedAt": "2023-05-15T10:00:00.000Z",
-        "UpdatedAt": "2023-05-15T10:00:00.000Z",
-        "DataSources": {
-            "CloudTrail": {"Status": "ENABLED"},
-            "S3Logs": {"Status": "ENABLED"},
-            "Kubernetes": {"AuditLogs": {"Status": "ENABLED"}},
-            "MalwareProtection": {"ScanEc2InstanceWithFindings": {"Status": "ENABLED"}}
-        },
-        "Tags": []
-    }
+    client = get_guardduty_client()
+    
+    try:
+        response = client.get_detector(
+            DetectorId=detector_id,
+            **kwargs
+        )
+        
+        # Add the DetectorId to the response for consistency
+        detector_details = response.copy()
+        detector_details['DetectorId'] = detector_id
+        
+        return detector_details
+    
+    except NoCredentialsError:
+        logger.error(f"AWS credentials not found for getting GuardDuty detector {detector_id}")
+        return None
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == 'BadRequestException':
+            logger.warning(f"GuardDuty detector {detector_id} not found")
+        else:
+            logger.error(f"AWS API error getting GuardDuty detector {detector_id}: {error_code} - {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error getting GuardDuty detector {detector_id}: {e}")
+        return None
 
 
 def get_detector_id() -> Optional[str]:
@@ -111,30 +167,42 @@ def list_findings(
     if finding_criteria:
         params['FindingCriteria'] = finding_criteria
     
-    # Call the API directly and handle pagination manually
-    response = client.list_findings(**params)
-    finding_ids = response.get('FindingIds', [])
-    
-    # Handle pagination if there's a next token
-    next_token = response.get('NextToken')
-    while next_token and len(finding_ids) < max_results:
-        params['NextToken'] = next_token
-        # Adjust max_results for the next request
-        params['MaxResults'] = min(50, max_results - len(finding_ids))
-        
+    try:
+        # Call the API directly and handle pagination manually
         response = client.list_findings(**params)
-        finding_ids.extend(response.get('FindingIds', []))
-        next_token = response.get('NextToken')
+        finding_ids = response.get('FindingIds', [])
         
-        # Break if we have enough findings
-        if len(finding_ids) >= max_results:
-            break
+        # Handle pagination if there's a next token
+        next_token = response.get('NextToken')
+        while next_token and len(finding_ids) < max_results:
+            params['NextToken'] = next_token
+            # Adjust max_results for the next request
+            params['MaxResults'] = min(50, max_results - len(finding_ids))
+            
+            response = client.list_findings(**params)
+            finding_ids.extend(response.get('FindingIds', []))
+            next_token = response.get('NextToken')
+            
+            # Break if we have enough findings
+            if len(finding_ids) >= max_results:
+                break
+        
+        # Limit the results if we got more than requested
+        if len(finding_ids) > max_results:
+            finding_ids = finding_ids[:max_results]
+        
+        return finding_ids
     
-    # Limit the results if we got more than requested
-    if len(finding_ids) > max_results:
-        finding_ids = finding_ids[:max_results]
-    
-    return finding_ids
+    except NoCredentialsError:
+        logger.error(f"AWS credentials not found for listing GuardDuty findings for detector {detector_id}")
+        return []
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        logger.error(f"AWS API error listing GuardDuty findings for detector {detector_id}: {error_code} - {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error listing GuardDuty findings for detector {detector_id}: {e}")
+        return []
 
 
 def get_findings(
@@ -170,24 +238,36 @@ def get_findings(
     client = get_guardduty_client()
     all_findings = []
     
-    # Process finding IDs in batches of 50 (API limitation)
-    for i in range(0, len(finding_ids), 50):
-        batch_ids = finding_ids[i:i+50]
+    try:
+        # Process finding IDs in batches of 50 (API limitation)
+        for i in range(0, len(finding_ids), 50):
+            batch_ids = finding_ids[i:i+50]
+            
+            findings_response = client.get_findings(
+                DetectorId=detector_id,
+                FindingIds=batch_ids,
+                **kwargs
+            )
+            
+            findings = findings_response.get('Findings', [])
+            all_findings.extend(findings)
+            
+            # Check if we have enough findings
+            if len(all_findings) >= max_results:
+                return all_findings[:max_results]
         
-        findings_response = client.get_findings(
-            DetectorId=detector_id,
-            FindingIds=batch_ids,
-            **kwargs
-        )
-        
-        findings = findings_response.get('Findings', [])
-        all_findings.extend(findings)
-        
-        # Check if we have enough findings
-        if len(all_findings) >= max_results:
-            return all_findings[:max_results]
+        return all_findings
     
-    return all_findings
+    except NoCredentialsError:
+        logger.error(f"AWS credentials not found for getting GuardDuty findings for detector {detector_id}")
+        return []
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        logger.error(f"AWS API error getting GuardDuty findings for detector {detector_id}: {error_code} - {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error getting GuardDuty findings for detector {detector_id}: {e}")
+        return []
 
 
 def list_ip_sets(
@@ -220,30 +300,42 @@ def list_ip_sets(
         **kwargs
     }
     
-    # Call the API directly and handle pagination manually
-    response = client.list_ip_sets(**params)
-    ip_set_ids = response.get('IpSetIds', [])
-    
-    # Handle pagination if there's a next token
-    next_token = response.get('NextToken')
-    while next_token and len(ip_set_ids) < max_results:
-        params['NextToken'] = next_token
-        # Adjust max_results for the next request
-        params['MaxResults'] = min(50, max_results - len(ip_set_ids))
-        
+    try:
+        # Call the API directly and handle pagination manually
         response = client.list_ip_sets(**params)
-        ip_set_ids.extend(response.get('IpSetIds', []))
-        next_token = response.get('NextToken')
+        ip_set_ids = response.get('IpSetIds', [])
         
-        # Break if we have enough IP sets
-        if len(ip_set_ids) >= max_results:
-            break
+        # Handle pagination if there's a next token
+        next_token = response.get('NextToken')
+        while next_token and len(ip_set_ids) < max_results:
+            params['NextToken'] = next_token
+            # Adjust max_results for the next request
+            params['MaxResults'] = min(50, max_results - len(ip_set_ids))
+            
+            response = client.list_ip_sets(**params)
+            ip_set_ids.extend(response.get('IpSetIds', []))
+            next_token = response.get('NextToken')
+            
+            # Break if we have enough IP sets
+            if len(ip_set_ids) >= max_results:
+                break
+        
+        # Limit the results if we got more than requested
+        if len(ip_set_ids) > max_results:
+            ip_set_ids = ip_set_ids[:max_results]
+        
+        return [{"IpSetId": ip_set_id} for ip_set_id in ip_set_ids]
     
-    # Limit the results if we got more than requested
-    if len(ip_set_ids) > max_results:
-        ip_set_ids = ip_set_ids[:max_results]
-    
-    return [{"IpSetId": ip_set_id} for ip_set_id in ip_set_ids]
+    except NoCredentialsError:
+        logger.error(f"AWS credentials not found for listing GuardDuty IP sets for detector {detector_id}")
+        return []
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        logger.error(f"AWS API error listing GuardDuty IP sets for detector {detector_id}: {error_code} - {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error listing GuardDuty IP sets for detector {detector_id}: {e}")
+        return []
 
 
 def list_threat_intel_sets(
@@ -276,30 +368,42 @@ def list_threat_intel_sets(
         **kwargs
     }
     
-    # Call the API directly and handle pagination manually
-    response = client.list_threat_intel_sets(**params)
-    threat_intel_set_ids = response.get('ThreatIntelSetIds', [])
-    
-    # Handle pagination if there's a next token
-    next_token = response.get('NextToken')
-    while next_token and len(threat_intel_set_ids) < max_results:
-        params['NextToken'] = next_token
-        # Adjust max_results for the next request
-        params['MaxResults'] = min(50, max_results - len(threat_intel_set_ids))
-        
+    try:
+        # Call the API directly and handle pagination manually
         response = client.list_threat_intel_sets(**params)
-        threat_intel_set_ids.extend(response.get('ThreatIntelSetIds', []))
-        next_token = response.get('NextToken')
+        threat_intel_set_ids = response.get('ThreatIntelSetIds', [])
         
-        # Break if we have enough threat intel sets
-        if len(threat_intel_set_ids) >= max_results:
-            break
+        # Handle pagination if there's a next token
+        next_token = response.get('NextToken')
+        while next_token and len(threat_intel_set_ids) < max_results:
+            params['NextToken'] = next_token
+            # Adjust max_results for the next request
+            params['MaxResults'] = min(50, max_results - len(threat_intel_set_ids))
+            
+            response = client.list_threat_intel_sets(**params)
+            threat_intel_set_ids.extend(response.get('ThreatIntelSetIds', []))
+            next_token = response.get('NextToken')
+            
+            # Break if we have enough threat intel sets
+            if len(threat_intel_set_ids) >= max_results:
+                break
+        
+        # Limit the results if we got more than requested
+        if len(threat_intel_set_ids) > max_results:
+            threat_intel_set_ids = threat_intel_set_ids[:max_results]
+        
+        return [{"ThreatIntelSetId": threat_intel_set_id} for threat_intel_set_id in threat_intel_set_ids]
     
-    # Limit the results if we got more than requested
-    if len(threat_intel_set_ids) > max_results:
-        threat_intel_set_ids = threat_intel_set_ids[:max_results]
-    
-    return [{"ThreatIntelSetId": threat_intel_set_id} for threat_intel_set_id in threat_intel_set_ids]
+    except NoCredentialsError:
+        logger.error(f"AWS credentials not found for listing GuardDuty threat intel sets for detector {detector_id}")
+        return []
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        logger.error(f"AWS API error listing GuardDuty threat intel sets for detector {detector_id}: {error_code} - {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error listing GuardDuty threat intel sets for detector {detector_id}: {e}")
+        return []
 
 
 def filter_findings_by_severity(
