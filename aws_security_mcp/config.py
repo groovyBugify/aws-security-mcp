@@ -93,6 +93,14 @@ class MCPServerConfig(BaseModel):
         default="info",
         description="Logging level"
     )
+    max_concurrent_requests: int = Field(
+        default=10,
+        description="Maximum number of concurrent AWS API requests"
+    )
+    client_cache_ttl: int = Field(
+        default=3600,
+        description="Time to live for cached AWS clients in seconds"
+    )
     
     @validator('log_level')
     def validate_log_level(cls, v: str) -> str:
@@ -133,6 +141,8 @@ def load_config() -> AppConfig:
         "port": int(os.getenv("MCP_PORT", "8000")),
         "debug": os.getenv("MCP_DEBUG", "False").lower() in ("true", "1", "yes"),
         "log_level": os.getenv("MCP_LOG_LEVEL", "info"),
+        "max_concurrent_requests": int(os.getenv("MCP_MAX_CONCURRENT_REQUESTS", "10")),
+        "client_cache_ttl": int(os.getenv("MCP_CLIENT_CACHE_TTL", "3600")),
     }
     
     # Create the config object

@@ -18,7 +18,18 @@ from aws_security_mcp.services.base import get_client, handle_aws_error, format_
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Helper function for running sync code in an executor
+# ThreadPoolExecutor for async operations - use a bounded pool to prevent resource leaks
+from concurrent.futures import ThreadPoolExecutor
+import functools
+
+from aws_security_mcp.config import config
+
+# Create a bounded thread pool to prevent resource exhaustion
+_executor = ThreadPoolExecutor(
+    max_workers=config.server.max_concurrent_requests, 
+    thread_name_prefix="aws-s3"
+)
+
 async def run_in_executor(func: Callable, *args, **kwargs) -> Any:
     """Run a synchronous function in an executor to make it awaitable.
     
@@ -31,9 +42,9 @@ async def run_in_executor(func: Callable, *args, **kwargs) -> Any:
         The result of the function call
     """
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, lambda: func(*args, **kwargs)
-    )
+    # Use our bounded executor instead of the default None (unbounded)
+    partial_func = functools.partial(func, *args, **kwargs)
+    return await loop.run_in_executor(_executor, partial_func)
 
 def list_buckets() -> List[Dict[str, Any]]:
     """List all S3 buckets in the account using pagination.

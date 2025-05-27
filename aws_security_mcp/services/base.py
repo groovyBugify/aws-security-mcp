@@ -2,6 +2,10 @@
 
 import logging
 from typing import Any, Dict, Optional, Type, Union, List
+from functools import lru_cache
+import threading
+import time
+import atexit
 
 import boto3
 from botocore.config import Config
@@ -11,6 +15,27 @@ from aws_security_mcp.config import config
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Thread-safe client cache with timestamps
+_client_cache: Dict[str, tuple[boto3.client, float]] = {}
+_cache_lock = threading.Lock()
+_cache_max_age = 3600  # Cache for 1 hour by default
+
+def _cleanup_expired_clients():
+    """Remove expired clients from cache."""
+    current_time = time.time()
+    with _cache_lock:
+        expired_keys = [
+            key for key, (client, timestamp) in _client_cache.items()
+            if current_time - timestamp > _cache_max_age
+        ]
+        for key in expired_keys:
+            del _client_cache[key]
+        if expired_keys:
+            logger.debug(f"Cleaned up {len(expired_keys)} expired AWS clients")
+
+# Register cleanup on exit
+atexit.register(lambda: clear_client_cache())
 
 def get_aws_session(
     region: Optional[str] = None,
@@ -84,7 +109,7 @@ def get_client(
     profile: Optional[str] = None,
     retry_attempts: int = 3
 ) -> boto3.client:
-    """Get a boto3 client for the specified AWS service.
+    """Get a cached boto3 client for the specified AWS service.
     
     Args:
         service_name: Name of the AWS service
@@ -93,17 +118,50 @@ def get_client(
         retry_attempts: Number of retry attempts for AWS API calls
         
     Returns:
-        Configured boto3 client for the specified service
+        Cached boto3 client for the specified service
     """
-    session = get_aws_session(region, profile)
+    # Create cache key from parameters
+    region = region or config.aws.aws_region
+    profile = profile or config.aws.aws_profile
+    cache_key = f"{service_name}:{region}:{profile}:{retry_attempts}"
     
-    # Configure client with retries
-    boto_config = Config(
-        retries={"max_attempts": retry_attempts, "mode": "adaptive"},
-        user_agent_extra=f"AWSSecurityMCP/{config.aws.aws_region}"
-    )
+    # Clean up expired clients periodically
+    _cleanup_expired_clients()
     
-    return session.client(service_name, config=boto_config)
+    # Check if client exists in cache and is not expired
+    current_time = time.time()
+    with _cache_lock:
+        if cache_key in _client_cache:
+            client, timestamp = _client_cache[cache_key]
+            if current_time - timestamp < _cache_max_age:
+                return client
+            else:
+                # Remove expired client
+                del _client_cache[cache_key]
+        
+        # Create new client if not in cache or expired
+        session = get_aws_session(region, profile)
+        
+        # Configure client with retries
+        boto_config = Config(
+            retries={"max_attempts": retry_attempts, "mode": "adaptive"},
+            user_agent_extra=f"AWSSecurityMCP/{config.aws.aws_region}",
+            max_pool_connections=50  # Increase connection pool size
+        )
+        
+        client = session.client(service_name, config=boto_config)
+        
+        # Cache the client with timestamp
+        _client_cache[cache_key] = (client, current_time)
+        logger.debug(f"Created and cached new {service_name} client for region {region}")
+        
+        return client
+
+def clear_client_cache():
+    """Clear the client cache. Useful for testing or credential rotation."""
+    with _cache_lock:
+        _client_cache.clear()
+        logger.info("Cleared AWS client cache")
 
 async def handle_aws_error(func: callable, *args, **kwargs) -> Dict[str, Any]:
     """Execute an AWS API call with error handling.

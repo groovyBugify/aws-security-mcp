@@ -92,6 +92,8 @@ Alternatively, edit this file directly:
 /Users/YOUR_USER/Library/Application Support/Claude/claude_desktop_config.json
 ```
 
+**NOTE** - It is advised to utilise Claude Pro Plan for this, as the number of tools will break the context window and token size limit on the FREE plan. 
+
 ## Running AWS Security MCP on steroids
 
 Using any MCP Client we can couple multiple MCPs toghthere for example - 

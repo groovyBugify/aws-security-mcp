@@ -3,6 +3,7 @@
 import importlib
 import logging
 import sys
+import signal
 from typing import Dict, List, Optional
 
 try:
@@ -24,6 +25,7 @@ except ImportError:
 
 from aws_security_mcp.config import config
 from aws_security_mcp.tools import get_all_tools
+from aws_security_mcp.services.base import clear_client_cache
 
 # Configure logging
 logging.basicConfig(
@@ -34,6 +36,21 @@ logger = logging.getLogger(__name__)
 
 # Create MCP server
 mcp = FastMCP("aws-security")
+
+# Global flag for graceful shutdown
+_shutdown_flag = False
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    global _shutdown_flag
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    _shutdown_flag = True
+    cleanup_resources()
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 def register_tools() -> None:
     """Register all MCP tools from tool modules."""
@@ -93,26 +110,55 @@ async def list_tools():
     """List all available MCP tools."""
     return {"tools": list(mcp.registered_tools.keys())}
 
+def cleanup_resources() -> None:
+    """Clean up AWS client resources."""
+    try:
+        clear_client_cache()
+        logger.info("Cleaned up AWS client cache")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
 def run_http_app() -> None:
     """Run the MCP server in HTTP mode."""
-    # Register tools
-    register_tools()
-    
-    # Start the HTTP server
-    uvicorn.run(
-        "aws_security_mcp.main:app",
-        host=config.server.host,
-        port=config.server.port,
-        reload=config.server.debug,
-    )
+    try:
+        # Register tools
+        register_tools()
+        
+        # Start the HTTP server
+        uvicorn.run(
+            "aws_security_mcp.main:app",
+            host=config.server.host,
+            port=config.server.port,
+            reload=config.server.debug,
+        )
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested")
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+    finally:
+        cleanup_resources()
 
 def run_mcp_stdio() -> None:
     """Run the MCP server in stdio mode for Claude Desktop."""
-    # Register tools
-    register_tools()
-    
-    # Run MCP server with stdio transport (required for Claude Desktop)
-    mcp.run(transport='stdio')
+    try:
+        # Register tools
+        register_tools()
+        logger.info("Starting MCP server with stdio transport...")
+        
+        # Run MCP server with stdio transport (required for Claude Desktop)
+        mcp.run(transport='stdio')
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested via keyboard interrupt")
+    except (BrokenPipeError, ConnectionResetError) as e:
+        logger.warning(f"Client disconnected unexpectedly: {e}")
+    except Exception as e:
+        logger.error(f"Server error: {e}", exc_info=True)
+        # For anyio.BrokenResourceError, log but don't crash
+        if "BrokenResourceError" in str(type(e)):
+            logger.error("Stream broken - client likely disconnected")
+    finally:
+        # Clean up resources
+        cleanup_resources()
 
 if __name__ == "__main__":
     # Use stdio transport for MCP when running directly
