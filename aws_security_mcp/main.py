@@ -23,6 +23,16 @@ except ImportError:
     print("  uv pip install mcp>=1.0.0")
     sys.exit(1)
 
+# SSE transport imports
+try:
+    from mcp.server.sse import SseServerTransport
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    from starlette.responses import JSONResponse
+    SSE_AVAILABLE = True
+except ImportError:
+    SSE_AVAILABLE = False
+
 from aws_security_mcp.config import config
 from aws_security_mcp.tools import get_all_tools
 from aws_security_mcp.services.base import clear_client_cache
@@ -182,6 +192,34 @@ def cleanup_resources() -> None:
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
 
+def run_sse_server() -> None:
+    """Run the MCP server in SSE mode."""
+    if not SSE_AVAILABLE:
+        logger.error("SSE transport dependencies not available. Please install starlette>=0.27.0")
+        sys.exit(1)
+    
+    try:
+        # Register tools first
+        register_tools()
+        logger.info("Starting MCP server with SSE transport...")
+        logger.info("🚀 Starting AWS Security MCP SSE Server...")
+        
+        # Use FastMCP's built-in SSE support with default settings
+        logger.info("📡 SSE endpoint will be available on default port")
+        logger.info("🔍 Use: npx @modelcontextprotocol/inspector http://127.0.0.1:8000/sse")
+        
+        # Use FastMCP's run method with SSE transport (no host/port params)
+        mcp.run(transport='sse')
+        
+    except KeyboardInterrupt:
+        logger.info("SSE server shutdown requested")
+    except Exception as e:
+        logger.error(f"SSE server error: {e}")
+        import traceback
+        logger.error(f"SSE server traceback: {traceback.format_exc()}")
+    finally:
+        cleanup_resources()
+
 def run_http_app() -> None:
     """Run the MCP server in HTTP mode."""
     try:
@@ -224,7 +262,40 @@ def run_mcp_stdio() -> None:
         # Clean up resources
         cleanup_resources()
 
+def print_usage():
+    """Print usage information."""
+    print("AWS Security MCP Server")
+    print("Usage: python aws_security_mcp/main.py [mode]")
+    print("")
+    print("Modes:")
+    print("  stdio  - Standard I/O transport (default, for Claude Desktop)")
+    print("  http   - HTTP REST API server")
+    print("  sse    - Server-Sent Events transport (MCP over HTTP)")
+    print("")
+    print("Examples:")
+    print("  python aws_security_mcp/main.py stdio   # Claude Desktop")
+    print("  python aws_security_mcp/main.py http    # REST API on port 8000")
+    print("  python aws_security_mcp/main.py sse     # SSE on port 8001")
+
 if __name__ == "__main__":
-    # Use stdio transport for MCP when running directly
-    # This is required for Claude Desktop integration
-    run_mcp_stdio() 
+    # Check for mode argument
+    if len(sys.argv) > 1:
+        mode = sys.argv[1].lower()
+        
+        if mode in ["help", "-h", "--help"]:
+            print_usage()
+            sys.exit(0)
+        elif mode == "sse":
+            run_sse_server()
+        elif mode == "http":
+            run_http_app()
+        elif mode == "stdio":
+            run_mcp_stdio()
+        else:
+            print(f"Error: Unknown mode '{mode}'")
+            print("")
+            print_usage()
+            sys.exit(1)
+    else:
+        # Default to stdio for Claude Desktop compatibility
+        run_mcp_stdio() 

@@ -9,6 +9,7 @@ pydantic>=2.0.0
 python-dotenv>=1.0.0
 httpx>=0.24.1
 mcp>=1.0.0  # Model Context Protocol SDK for Claude Desktop
+starlette>=0.27.0  # Required for MCP SSE transport
 
 # Developer dependencies (uncomment if needed)
 # pytest>=7.3.1
