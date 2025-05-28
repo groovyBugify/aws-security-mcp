@@ -30,8 +30,14 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-@register_tool()
-async def list_ec2_instances(limit: Optional[int] = None, search_term: str = "", state: str = "running", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
+@register_tool('list_ec2_instances')
+async def list_ec2_instances(
+    limit: Optional[int] = None,
+    search_term: str = "",
+    state: str = "running",
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
+) -> str:
     """List EC2 instances with details.
     
     Args:
@@ -167,8 +173,13 @@ async def list_ec2_instances(limit: Optional[int] = None, search_term: str = "",
         })
 
 
-@register_tool()
-async def count_ec2_instances(state: str = "", has_public_access: Optional[bool] = None, port: Optional[int] = None, session_context: Optional[str] = None) -> str:
+@register_tool('count_ec2_instances')
+async def count_ec2_instances(
+    state: str = "",
+    has_public_access: Optional[bool] = None,
+    port: Optional[int] = None,
+    session_context: Optional[str] = None
+) -> str:
     """Count EC2 instances, optionally filtering by state and security group rules.
     
     Args:
@@ -300,8 +311,13 @@ async def count_ec2_instances(state: str = "", has_public_access: Optional[bool]
         return json.dumps({"error": {"message": f"Error counting EC2 instances: {str(e)}", "type": type(e).__name__}})
 
 
-@register_tool()
-async def list_security_groups(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
+@register_tool('list_security_groups')
+async def list_security_groups(
+    limit: Optional[int] = None,
+    search_term: str = "",
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
+) -> str:
     """List EC2 security groups with details.
     
     Args:
@@ -594,8 +610,13 @@ async def list_security_groups(limit: Optional[int] = None, search_term: str = "
         })
 
 
-@register_tool()
-async def list_vpcs(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
+@register_tool('list_vpcs')
+async def list_vpcs(
+    limit: Optional[int] = None,
+    search_term: str = "",
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
+) -> str:
     """List VPCs with details.
     
     Args:
@@ -688,8 +709,13 @@ async def list_vpcs(limit: Optional[int] = None, search_term: str = "", next_tok
         })
 
 
-@register_tool()
-async def list_route_tables(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
+@register_tool('list_route_tables')
+async def list_route_tables(
+    limit: Optional[int] = None,
+    search_term: str = "",
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
+) -> str:
     """List route tables with details.
     
     Args:
@@ -823,10 +849,15 @@ async def list_route_tables(limit: Optional[int] = None, search_term: str = "", 
         })
 
 
-@register_tool()
-async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = True, 
-                      limit: Optional[int] = None, search_term: str = "", 
-                      next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
+@register_tool('list_subnets')
+async def list_subnets(
+    vpc_id: Optional[str] = None,
+    include_details: bool = True,
+    limit: Optional[int] = None,
+    search_term: str = "",
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
+) -> str:
     """List all subnets in a VPC or across all VPCs.
     
     Args:

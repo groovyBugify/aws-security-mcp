@@ -22,7 +22,7 @@ from aws_security_mcp.tools.ecr_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def ecr_security_operations(operation: str, **params) -> str:
+async def ecr_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """ECR Security Operations Hub - Comprehensive container registry security analysis.
     
     🐳 REPOSITORY DISCOVERY:
@@ -68,6 +68,7 @@ async def ecr_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The ECR operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
         # Repository identification:
         repository_name: Name of the ECR repository (required for most operations)
@@ -80,11 +81,11 @@ async def ecr_security_operations(operation: str, **params) -> str:
         JSON formatted response with operation results and ECR security insights
     """
     
-    logger.info(f"ECR operation requested: {operation}")
+    logger.info(f"ECR operation requested: {operation} (session_context={session_context})")
     
     try:
         if operation == "list_repositories":
-            result = await _list_ecr_repositories()
+            result = await _list_ecr_repositories(session_context=session_context)
             return json.dumps(result, default=str)
             
         elif operation == "search_repositories":
@@ -93,7 +94,8 @@ async def ecr_security_operations(operation: str, **params) -> str:
             
             result = await _search_ecr_repositories(
                 repository_name=repository_name,
-                repository_names=repository_names
+                repository_names=repository_names,
+                session_context=session_context
             )
             return json.dumps(result, default=str)
             
@@ -105,7 +107,7 @@ async def ecr_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_repository_policy', repository_name='my-app'"
                 })
             
-            result = await _get_ecr_repository_policy(repository_name=repository_name)
+            result = await _get_ecr_repository_policy(repository_name=repository_name, session_context=session_context)
             return json.dumps(result, default=str)
             
         elif operation == "get_repository_images":
@@ -116,7 +118,7 @@ async def ecr_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_repository_images', repository_name='my-app'"
                 })
             
-            result = await _get_ecr_repository_images(repository_name=repository_name)
+            result = await _get_ecr_repository_images(repository_name=repository_name, session_context=session_context)
             return json.dumps(result, default=str)
             
         elif operation == "get_image_scan_findings":
@@ -131,7 +133,8 @@ async def ecr_security_operations(operation: str, **params) -> str:
             
             result = await _get_ecr_image_scan_findings(
                 repository_name=repository_name,
-                image_tag=image_tag
+                image_tag=image_tag,
+                session_context=session_context
             )
             return json.dumps(result, default=str)
             
@@ -176,9 +179,12 @@ async def discover_ecr_operations() -> str:
             "repository_discovery": {
                 "list_repositories": {
                     "description": "List all ECR repositories in the AWS account",
-                    "parameters": {},
+                    "parameters": {
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
+                    },
                     "examples": [
-                        "ecr_security_operations(operation='list_repositories')"
+                        "ecr_security_operations(operation='list_repositories')",
+                        "ecr_security_operations(operation='list_repositories', session_context='123456789012_aws_dev')"
                     ],
                     "returns": [
                         "List of repository names",
@@ -192,12 +198,14 @@ async def discover_ecr_operations() -> str:
                     "description": "Search for ECR repositories with detailed information",
                     "parameters": {
                         "repository_name": {"type": "str", "description": "Single repository name to search"},
-                        "repository_names": {"type": "list", "description": "List of repository names to search"}
+                        "repository_names": {"type": "list", "description": "List of repository names to search"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecr_security_operations(operation='search_repositories')",
                         "ecr_security_operations(operation='search_repositories', repository_name='my-app')",
-                        "ecr_security_operations(operation='search_repositories', repository_names=['app1', 'app2'])"
+                        "ecr_security_operations(operation='search_repositories', repository_names=['app1', 'app2'])",
+                        "ecr_security_operations(operation='search_repositories', session_context='123456789012_aws_dev')"
                     ],
                     "returns": [
                         "Detailed repository information",
@@ -211,10 +219,12 @@ async def discover_ecr_operations() -> str:
                 "get_repository_policy": {
                     "description": "Get IAM policy for an ECR repository",
                     "parameters": {
-                        "repository_name": {"type": "str", "required": True, "description": "Name of the ECR repository"}
+                        "repository_name": {"type": "str", "required": True, "description": "Name of the ECR repository"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
-                        "ecr_security_operations(operation='get_repository_policy', repository_name='my-app')"
+                        "ecr_security_operations(operation='get_repository_policy', repository_name='my-app')",
+                        "ecr_security_operations(operation='get_repository_policy', repository_name='my-app', session_context='123456789012_aws_dev')"
                     ],
                     "returns": [
                         "Repository IAM policy document",
@@ -227,10 +237,12 @@ async def discover_ecr_operations() -> str:
                 "get_repository_images": {
                     "description": "Get information about all images in an ECR repository",
                     "parameters": {
-                        "repository_name": {"type": "str", "required": True, "description": "Name of the ECR repository"}
+                        "repository_name": {"type": "str", "required": True, "description": "Name of the ECR repository"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
-                        "ecr_security_operations(operation='get_repository_images', repository_name='my-app')"
+                        "ecr_security_operations(operation='get_repository_images', repository_name='my-app')",
+                        "ecr_security_operations(operation='get_repository_images', repository_name='my-app', session_context='123456789012_aws_dev')"
                     ],
                     "returns": [
                         "List of container images",
@@ -245,11 +257,13 @@ async def discover_ecr_operations() -> str:
                     "description": "Get vulnerability scan findings for container images",
                     "parameters": {
                         "repository_name": {"type": "str", "required": True, "description": "Name of the ECR repository"},
-                        "image_tag": {"type": "str", "default": "latest", "description": "Tag of the image to scan"}
+                        "image_tag": {"type": "str", "default": "latest", "description": "Tag of the image to scan"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecr_security_operations(operation='get_image_scan_findings', repository_name='my-app')",
-                        "ecr_security_operations(operation='get_image_scan_findings', repository_name='my-app', image_tag='v1.0.0')"
+                        "ecr_security_operations(operation='get_image_scan_findings', repository_name='my-app', image_tag='v1.0.0')",
+                        "ecr_security_operations(operation='get_image_scan_findings', repository_name='my-app', session_context='123456789012_aws_dev')"
                     ],
                     "returns": [
                         "Vulnerability findings",

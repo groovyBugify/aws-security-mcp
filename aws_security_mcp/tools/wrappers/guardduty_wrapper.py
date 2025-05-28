@@ -22,7 +22,7 @@ from aws_security_mcp.tools.guardduty_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def guardduty_security_operations(operation: str, **params) -> str:
+async def guardduty_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """GuardDuty Security Operations Hub - Comprehensive threat detection and monitoring.
     
     🔍 DETECTOR MANAGEMENT:
@@ -41,6 +41,9 @@ async def guardduty_security_operations(operation: str, **params) -> str:
     🔍 Find all detectors:
     operation="list_detectors"
     
+    🔍 Find detectors across accounts:
+    operation="list_detectors", session_context="123456789012_aws_dev"
+    
     🚨 Get high-severity threats:
     operation="list_findings", detector_id="abc123", severity="HIGH", max_results=50
     
@@ -53,8 +56,12 @@ async def guardduty_security_operations(operation: str, **params) -> str:
     🛡️ Review IP threat intelligence:
     operation="list_ip_sets", detector_id="abc123"
     
+    🔄 Cross-account access example:
+    operation="list_findings", detector_id="abc123", session_context="123456789012_aws_dev"
+    
     Args:
         operation: The security operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         detector_id: GuardDuty detector ID (required for most operations)
         max_results: Maximum number of results to return (default: 50-100)
         severity: Filter findings by severity (LOW, MEDIUM, HIGH, ALL)
@@ -66,7 +73,7 @@ async def guardduty_security_operations(operation: str, **params) -> str:
         JSON formatted response with operation results and security insights
     """
     
-    logger.info(f"GuardDuty operation requested: {operation}")
+    logger.info(f"GuardDuty operation requested: {operation} (session_context={session_context})")
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -75,7 +82,7 @@ async def guardduty_security_operations(operation: str, **params) -> str:
     try:
         if operation == "list_detectors":
             max_results = params.get("max_results", 100)
-            return await _list_detectors(max_results=max_results)
+            return await _list_detectors(max_results=max_results, session_context=session_context)
             
         elif operation == "list_findings":
             # Ensure detector_id is provided
@@ -97,7 +104,8 @@ async def guardduty_security_operations(operation: str, **params) -> str:
                 max_results=max_results,
                 finding_ids=finding_ids,
                 severity=severity,
-                search_term=search_term
+                search_term=search_term,
+                session_context=session_context
             )
             
         elif operation == "get_finding_details":
@@ -116,7 +124,8 @@ async def guardduty_security_operations(operation: str, **params) -> str:
             
             return await _get_finding_details(
                 detector_id=detector_id,
-                finding_id=finding_id
+                finding_id=finding_id,
+                session_context=session_context
             )
             
         elif operation == "list_ip_sets":
@@ -131,7 +140,8 @@ async def guardduty_security_operations(operation: str, **params) -> str:
             
             return await _list_ip_sets(
                 detector_id=detector_id,
-                max_results=max_results
+                max_results=max_results,
+                session_context=session_context
             )
             
         elif operation == "list_threat_intel_sets":
@@ -146,7 +156,8 @@ async def guardduty_security_operations(operation: str, **params) -> str:
             
             return await _list_threat_intel_sets(
                 detector_id=detector_id,
-                max_results=max_results
+                max_results=max_results,
+                session_context=session_context
             )
             
         else:
@@ -196,17 +207,28 @@ async def discover_guardduty_operations() -> str:
         "service": "AWS GuardDuty",
         "description": "Threat detection and continuous security monitoring service",
         "wrapper_tool": "guardduty_security_operations",
+        "cross_account_support": {
+            "enabled": True,
+            "parameter": "session_context",
+            "format": "123456789012_aws_dev",
+            "description": "Access GuardDuty resources across different AWS accounts"
+        },
         "operations": {
             "list_detectors": {
                 "description": "List all GuardDuty detectors in the AWS account",
                 "parameters": {
-                    "max_results": {"type": "int", "default": 100, "description": "Maximum detectors to return"}
+                    "max_results": {"type": "int", "default": 100, "description": "Maximum detectors to return"},
+                    "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                 },
-                "example": "guardduty_security_operations(operation='list_detectors')",
+                "examples": [
+                    "guardduty_security_operations(operation='list_detectors')",
+                    "guardduty_security_operations(operation='list_detectors', session_context='123456789012_aws_dev')"
+                ],
                 "use_cases": [
                     "Check if GuardDuty is enabled",
                     "Audit detector configurations",
-                    "Get detector IDs for other operations"
+                    "Get detector IDs for other operations",
+                    "Cross-account detector discovery"
                 ]
             },
             "list_findings": {
@@ -216,57 +238,75 @@ async def discover_guardduty_operations() -> str:
                     "max_results": {"type": "int", "default": 50, "description": "Maximum findings to return"},
                     "severity": {"type": "str", "options": ["LOW", "MEDIUM", "HIGH", "ALL"], "description": "Filter by severity"},
                     "search_term": {"type": "str", "description": "Text search across finding details"},
-                    "finding_ids": {"type": "list", "description": "Specific finding IDs to retrieve"}
+                    "finding_ids": {"type": "list", "description": "Specific finding IDs to retrieve"},
+                    "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                 },
                 "examples": [
                     "guardduty_security_operations(operation='list_findings', detector_id='abc123')",
                     "guardduty_security_operations(operation='list_findings', detector_id='abc123', severity='HIGH')",
-                    "guardduty_security_operations(operation='list_findings', detector_id='abc123', search_term='cryptocurrency')"
+                    "guardduty_security_operations(operation='list_findings', detector_id='abc123', search_term='cryptocurrency')",
+                    "guardduty_security_operations(operation='list_findings', detector_id='abc123', session_context='123456789012_aws_dev')"
                 ],
                 "use_cases": [
                     "Monitor active security threats",
                     "Filter findings by severity level", 
                     "Search for specific threat patterns",
-                    "Export findings for reporting"
+                    "Export findings for reporting",
+                    "Cross-account threat monitoring"
                 ]
             },
             "get_finding_details": {
                 "description": "Get comprehensive details about a specific security finding",
                 "parameters": {
                     "detector_id": {"type": "str", "required": True, "description": "GuardDuty detector ID"},
-                    "finding_id": {"type": "str", "required": True, "description": "Specific finding ID to analyze"}
+                    "finding_id": {"type": "str", "required": True, "description": "Specific finding ID to analyze"},
+                    "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                 },
-                "example": "guardduty_security_operations(operation='get_finding_details', detector_id='abc123', finding_id='def456')",
+                "examples": [
+                    "guardduty_security_operations(operation='get_finding_details', detector_id='abc123', finding_id='def456')",
+                    "guardduty_security_operations(operation='get_finding_details', detector_id='abc123', finding_id='def456', session_context='123456789012_aws_dev')"
+                ],
                 "use_cases": [
                     "Investigate specific security incidents",
                     "Get remediation recommendations",
-                    "Analyze attack patterns and IOCs"
+                    "Analyze attack patterns and IOCs",
+                    "Cross-account incident investigation"
                 ]
             },
             "list_ip_sets": {
                 "description": "List trusted and threat IP sets configured in GuardDuty",
                 "parameters": {
                     "detector_id": {"type": "str", "required": True, "description": "GuardDuty detector ID"},
-                    "max_results": {"type": "int", "default": 50, "description": "Maximum IP sets to return"}
+                    "max_results": {"type": "int", "default": 50, "description": "Maximum IP sets to return"},
+                    "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                 },
-                "example": "guardduty_security_operations(operation='list_ip_sets', detector_id='abc123')",
+                "examples": [
+                    "guardduty_security_operations(operation='list_ip_sets', detector_id='abc123')",
+                    "guardduty_security_operations(operation='list_ip_sets', detector_id='abc123', session_context='123456789012_aws_dev')"
+                ],
                 "use_cases": [
                     "Review custom threat intelligence",
                     "Audit trusted IP configurations",
-                    "Manage IP-based detection rules"
+                    "Manage IP-based detection rules",
+                    "Cross-account IP set management"
                 ]
             },
             "list_threat_intel_sets": {
                 "description": "List threat intelligence feeds and indicators",
                 "parameters": {
                     "detector_id": {"type": "str", "required": True, "description": "GuardDuty detector ID"},
-                    "max_results": {"type": "int", "default": 50, "description": "Maximum threat intel sets to return"}
+                    "max_results": {"type": "int", "default": 50, "description": "Maximum threat intel sets to return"},
+                    "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                 },
-                "example": "guardduty_security_operations(operation='list_threat_intel_sets', detector_id='abc123')",
+                "examples": [
+                    "guardduty_security_operations(operation='list_threat_intel_sets', detector_id='abc123')",
+                    "guardduty_security_operations(operation='list_threat_intel_sets', detector_id='abc123', session_context='123456789012_aws_dev')"
+                ],
                 "use_cases": [
                     "Review threat intelligence sources",
                     "Validate threat feed configurations",
-                    "Audit custom threat indicators"
+                    "Audit custom threat indicators",
+                    "Cross-account threat intelligence management"
                 ]
             }
         },
@@ -275,11 +315,13 @@ async def discover_guardduty_operations() -> str:
                 "Always start with list_detectors to get detector IDs",
                 "Use severity filtering for high-priority threat triage",
                 "Regular monitoring of HIGH severity findings",
-                "Review threat intelligence configurations periodically"
+                "Review threat intelligence configurations periodically",
+                "Implement cross-account monitoring for centralized security"
             ],
             "common_workflows": [
                 "1. List detectors → 2. List high-severity findings → 3. Analyze specific findings",
-                "1. List detectors → 2. Review IP sets → 3. Validate threat intelligence"
+                "1. List detectors → 2. Review IP sets → 3. Validate threat intelligence",
+                "Cross-account: 1. List detectors with session_context → 2. Monitor findings across accounts"
             ]
         }
     }

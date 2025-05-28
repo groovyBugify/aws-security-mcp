@@ -10,14 +10,17 @@ from aws_security_mcp.services.base import get_client
 
 logger = logging.getLogger(__name__)
 
-async def get_clusters() -> Dict[str, Any]:
+async def get_clusters(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve all ECS clusters.
+    
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
     
     Returns:
         Dict containing ECS clusters or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('list_clusters')
@@ -61,18 +64,19 @@ async def get_clusters() -> Dict[str, Any]:
             "count": 0
         }
 
-async def get_task_definitions(family_prefix: Optional[str] = None, status: str = "ACTIVE") -> Dict[str, Any]:
+async def get_task_definitions(family_prefix: Optional[str] = None, status: str = "ACTIVE", session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve ECS task definitions with security focus.
     
     Args:
         family_prefix: Optional family name prefix to filter task definitions
         status: Task definition status to filter by (ACTIVE or INACTIVE)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing task definitions or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('list_task_definitions')
@@ -120,17 +124,18 @@ async def get_task_definitions(family_prefix: Optional[str] = None, status: str 
             "count": 0
         }
 
-async def get_services(cluster: str) -> Dict[str, Any]:
+async def get_services(cluster: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve ECS services with security focus.
     
     Args:
         cluster: The cluster ARN or name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing services or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('list_services')
@@ -177,18 +182,19 @@ async def get_services(cluster: str) -> Dict[str, Any]:
             "cluster": cluster
         }
 
-async def get_tasks(cluster: str, service: Optional[str] = None) -> Dict[str, Any]:
+async def get_tasks(cluster: str, service: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve ECS tasks with security focus.
     
     Args:
         cluster: The cluster ARN or name
         service: Optional service name to filter tasks
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing tasks or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('list_tasks')
@@ -245,17 +251,18 @@ async def get_tasks(cluster: str, service: Optional[str] = None) -> Dict[str, An
             "service": service
         }
 
-async def get_container_instances(cluster: str) -> Dict[str, Any]:
+async def get_container_instances(cluster: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve ECS container instances with security focus.
     
     Args:
         cluster: The cluster ARN or name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing container instances or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('list_container_instances')
@@ -302,7 +309,7 @@ async def get_container_instances(cluster: str) -> Dict[str, Any]:
             "cluster": cluster
         }
 
-async def get_task_definition(task_definition_input: str, cluster: Optional[str] = None) -> Dict[str, Any]:
+async def get_task_definition(task_definition_input: str, cluster: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve detailed information about the latest active ECS task definition with running tasks.
     
     This function prioritizes finding task definitions that are actually in use. If a family
@@ -311,12 +318,13 @@ async def get_task_definition(task_definition_input: str, cluster: Optional[str]
     Args:
         task_definition_input: The task definition family name or ARN or family:revision
         cluster: Optional cluster name to check for running tasks (if None, checks all clusters)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing task definition details or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # If input looks like a family name only (no ARN format, no colon for revision)
         is_family_only = not task_definition_input.startswith('arn:') and ':' not in task_definition_input
@@ -418,18 +426,19 @@ async def get_task_definition(task_definition_input: str, cluster: Optional[str]
             "taskDefinition": {}
         }
 
-async def get_service(cluster: str, service: str) -> Dict[str, Any]:
+async def get_service(cluster: str, service: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve detailed information about a specific ECS service.
     
     Args:
         cluster: The cluster ARN or name
         service: The service ARN or name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing service details or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Get detailed information about the service
         response = client.describe_services(
@@ -473,18 +482,19 @@ async def get_service(cluster: str, service: str) -> Dict[str, Any]:
             "cluster": cluster
         }
 
-async def get_task(cluster: str, task: str) -> Dict[str, Any]:
+async def get_task(cluster: str, task: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve detailed information about a specific ECS task.
     
     Args:
         cluster: The cluster ARN or name
         task: The task ARN or ID
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing task details or error information
     """
     try:
-        client = get_client('ecs')
+        client = get_client('ecs', session_context=session_context)
         
         # Get detailed information about the task
         response = client.describe_tasks(

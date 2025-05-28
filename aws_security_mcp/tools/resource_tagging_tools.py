@@ -30,7 +30,8 @@ async def search_resources_by_tag(
     resource_types: Optional[List[str]] = None,
     next_token: Optional[str] = None,
     max_items: Optional[int] = None,
-    group_by_type: bool = True
+    group_by_type: bool = True,
+    session_context: Optional[str] = None
 ) -> str:
     """
     Search AWS resources by tag key and optional value.
@@ -42,6 +43,7 @@ async def search_resources_by_tag(
         next_token: Token for pagination
         max_items: Maximum number of items to return (no limit if None)
         group_by_type: If True, resources will be grouped by service/resource type
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with resources matching the specified tags and pagination details
@@ -56,7 +58,8 @@ async def search_resources_by_tag(
             tag_value=tag_value,
             resource_types=resource_types,
             next_token=next_token,
-            max_items=max_items
+            max_items=max_items,
+            session_context=session_context
         )
         
         # Format the response based on the grouping preference
@@ -86,7 +89,8 @@ async def search_resources_by_tag(
 @register_tool("get_all_tag_keys")
 async def get_all_tag_keys(
     next_token: Optional[str] = None,
-    max_items: Optional[int] = None
+    max_items: Optional[int] = None,
+    session_context: Optional[str] = None
 ) -> str:
     """
     Get all tag keys used in the AWS account.
@@ -94,6 +98,7 @@ async def get_all_tag_keys(
     Args:
         next_token: Token for pagination
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with tag keys and pagination details
@@ -102,7 +107,11 @@ async def get_all_tag_keys(
     logger.info(f"Invoked get_all_tag_keys()")
     
     try:
-        result = await _service.get_tag_keys(next_token=next_token, max_items=max_items)
+        result = await _service.get_tag_keys(
+            next_token=next_token, 
+            max_items=max_items, 
+            session_context=session_context
+        )
         formatted_result = format_tag_keys_response(result)
         return json.dumps(formatted_result)
     
@@ -119,7 +128,8 @@ async def get_all_tag_keys(
 async def get_tag_values_for_key(
     tag_key: str,
     next_token: Optional[str] = None,
-    max_items: Optional[int] = None
+    max_items: Optional[int] = None,
+    session_context: Optional[str] = None
 ) -> str:
     """
     Get all values for a specific tag key in the AWS account.
@@ -128,6 +138,7 @@ async def get_tag_values_for_key(
         tag_key: The tag key to get values for
         next_token: Token for pagination
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with tag values and pagination details
@@ -137,7 +148,12 @@ async def get_tag_values_for_key(
     
     try:
         # Skip tag key validation and directly get tag values
-        result = await _service.get_tag_values(tag_key=tag_key, next_token=next_token, max_items=max_items)
+        result = await _service.get_tag_values(
+            tag_key=tag_key, 
+            next_token=next_token, 
+            max_items=max_items, 
+            session_context=session_context
+        )
         formatted_result = format_tag_values_response(result)
         return json.dumps(formatted_result)
     

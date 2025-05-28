@@ -17,17 +17,20 @@ from aws_security_mcp.tools import register_tool
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def list_ecr_repositories() -> Dict[str, Any]:
+async def list_ecr_repositories(session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all ECR repositories in the AWS account.
+
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
     Returns:
         Dict containing list of ECR repository names
     """
     try:
-        logger.info("Listing ECR repositories")
+        logger.info(f"Listing ECR repositories (session_context={session_context})")
         
         # Get repositories from the service
-        result = await ecr.get_repositories()
+        result = await ecr.get_repositories(session_context=session_context)
         
         if not result.get("success", False):
             return {
@@ -56,23 +59,24 @@ async def list_ecr_repositories() -> Dict[str, Any]:
         }
 
 @register_tool()
-async def get_ecr_repository_policy(repository_name: str) -> Dict[str, Any]:
+async def get_ecr_repository_policy(repository_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get the IAM policy for an ECR repository.
     
     This tool retrieves the repository policy for the specified ECR repository.
     
     Args:
         repository_name: Name of the ECR repository
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing repository policy information
     """
-    logger.info(f"Getting policy for ECR repository: {repository_name}")
-    result = await ecr.get_repository_policy(repository_name)
+    logger.info(f"Getting policy for ECR repository: {repository_name} (session_context={session_context})")
+    result = await ecr.get_repository_policy(repository_name, session_context=session_context)
     return result
 
 @register_tool()
-async def get_ecr_image_scan_findings(repository_name: str, image_tag: str = 'latest') -> Dict[str, Any]:
+async def get_ecr_image_scan_findings(repository_name: str, image_tag: str = 'latest', session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get vulnerability scan findings for a container image.
     
     This tool retrieves scan findings for the specified container image.
@@ -80,32 +84,34 @@ async def get_ecr_image_scan_findings(repository_name: str, image_tag: str = 'la
     Args:
         repository_name: Name of the ECR repository
         image_tag: Tag of the image to check, defaults to 'latest'
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing vulnerability scan findings information
     """
-    logger.info(f"Getting scan findings for ECR image: {repository_name}:{image_tag}")
-    result = await ecr.get_repository_scan_findings(repository_name, image_tag)
+    logger.info(f"Getting scan findings for ECR image: {repository_name}:{image_tag} (session_context={session_context})")
+    result = await ecr.get_repository_scan_findings(repository_name, image_tag, session_context=session_context)
     return result
 
 @register_tool()
-async def get_ecr_repository_images(repository_name: str) -> Dict[str, Any]:
+async def get_ecr_repository_images(repository_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get information about all images in an ECR repository.
     
     This tool retrieves details about all container images in the specified repository.
     
     Args:
         repository_name: Name of the ECR repository
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing repository images information
     """
-    logger.info(f"Getting images for ECR repository: {repository_name}")
-    result = await ecr.get_repository_images(repository_name)
+    logger.info(f"Getting images for ECR repository: {repository_name} (session_context={session_context})")
+    result = await ecr.get_repository_images(repository_name, session_context=session_context)
     return result
 
 @register_tool()
-async def search_ecr_repositories(repository_name: Optional[str] = None, repository_names: Optional[List[str]] = None) -> Dict[str, Any]:
+async def search_ecr_repositories(repository_name: Optional[str] = None, repository_names: Optional[List[str]] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Search for ECR repositories and get detailed information.
     
     This tool allows searching for repositories by exact name match and 
@@ -116,22 +122,24 @@ async def search_ecr_repositories(repository_name: Optional[str] = None, reposit
         repository_name: Optional single repository name to search for exactly
         repository_names: Optional list of repository names to search for exactly
                          If neither parameter is provided, details for all repositories will be returned.
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing detailed information about matching repositories
     """
     try:
         if repository_name:
-            logger.info(f"Searching ECR repository with exact name: {repository_name}")
+            logger.info(f"Searching ECR repository with exact name: {repository_name} (session_context={session_context})")
         elif repository_names:
-            logger.info(f"Searching ECR repositories with exact names: {', '.join(repository_names)}")
+            logger.info(f"Searching ECR repositories with exact names: {', '.join(repository_names)} (session_context={session_context})")
         else:
-            logger.info("Fetching details for all ECR repositories")
+            logger.info(f"Fetching details for all ECR repositories (session_context={session_context})")
         
         # Get repository search results from the service using exact name matching
         search_results = await ecr.search_repositories(
             repository_name=repository_name, 
-            repository_names=repository_names
+            repository_names=repository_names,
+            session_context=session_context
         )
         
         if not search_results.get("success", False):

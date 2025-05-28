@@ -25,7 +25,7 @@ from aws_security_mcp.tools.route53_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def route53_security_operations(operation: str, **params) -> str:
+async def route53_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Route53 Security Operations Hub - Comprehensive AWS Route53 DNS security monitoring.
     
     🌐 HOSTED ZONE MANAGEMENT:
@@ -72,6 +72,7 @@ async def route53_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The Route53 operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access
         
         # Zone parameters:
         zone_id: Route53 hosted zone ID (with or without /hostedzone/ prefix)
@@ -97,7 +98,7 @@ async def route53_security_operations(operation: str, **params) -> str:
             limit = params.get("limit", 100)
             next_token = params.get("next_token")
             
-            return await _list_hosted_zones(limit=limit, next_token=next_token)
+            return await _list_hosted_zones(limit=limit, next_token=next_token, session_context=session_context)
             
         elif operation == "get_hosted_zone_details":
             zone_id = params.get("zone_id")
@@ -107,7 +108,7 @@ async def route53_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_hosted_zone_details', zone_id='Z1234567890ABC'"
                 })
             
-            return await _get_hosted_zone_details(zone_id=zone_id)
+            return await _get_hosted_zone_details(zone_id=zone_id, session_context=session_context)
             
         elif operation == "list_resource_record_sets":
             zone_id = params.get("zone_id")
@@ -123,20 +124,21 @@ async def route53_security_operations(operation: str, **params) -> str:
             return await _list_resource_record_sets(
                 zone_id=zone_id,
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "list_health_checks":
             limit = params.get("limit", 100)
             next_token = params.get("next_token")
             
-            return await _list_health_checks(limit=limit, next_token=next_token)
+            return await _list_health_checks(limit=limit, next_token=next_token, session_context=session_context)
             
         elif operation == "list_traffic_policies":
             limit = params.get("limit", 100)
             next_token = params.get("next_token")
             
-            return await _list_traffic_policies(limit=limit, next_token=next_token)
+            return await _list_traffic_policies(limit=limit, next_token=next_token, session_context=session_context)
             
         elif operation == "check_subdomain_takeover":
             domain_name = params.get("domain_name")
@@ -146,7 +148,7 @@ async def route53_security_operations(operation: str, **params) -> str:
                     "usage": "operation='check_subdomain_takeover', domain_name='subdomain.example.com'"
                 })
             
-            return await _check_subdomain_takeover_vulnerability(domain_name=domain_name)
+            return await _check_subdomain_takeover_vulnerability(domain_name=domain_name, session_context=session_context)
             
         elif operation == "find_ip_details":
             ip_address = params.get("ip_address")
@@ -156,7 +158,7 @@ async def route53_security_operations(operation: str, **params) -> str:
                     "usage": "operation='find_ip_details', ip_address='192.168.1.1'"
                 })
             
-            return await _find_ip_address_details(ip_address=ip_address)
+            return await _find_ip_address_details(ip_address=ip_address, session_context=session_context)
             
         elif operation == "analyze_domain_security":
             domain_name = params.get("domain_name")
@@ -166,7 +168,7 @@ async def route53_security_operations(operation: str, **params) -> str:
                     "usage": "operation='analyze_domain_security', domain_name='example.com'"
                 })
             
-            return await _analyze_domain_security(domain_name=domain_name)
+            return await _analyze_domain_security(domain_name=domain_name, session_context=session_context)
             
         else:
             # Provide helpful error with available operations
@@ -200,7 +202,7 @@ async def route53_security_operations(operation: str, **params) -> str:
         })
 
 @register_tool()
-async def discover_route53_operations() -> str:
+async def discover_route53_operations(session_context: Optional[str] = None) -> str:
     """Discover all available AWS Route53 operations with detailed usage examples.
     
     This tool provides comprehensive documentation of Route53 operations available

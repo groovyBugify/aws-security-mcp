@@ -6,21 +6,31 @@ from typing import Dict, List, Optional, Any, Union
 import boto3
 from botocore.exceptions import ClientError
 
+from aws_security_mcp.services.base import get_client
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
-def get_cloudfront_client():
-    """Get a boto3 CloudFront client."""
-    return boto3.client('cloudfront')
+def get_cloudfront_client(session_context: Optional[str] = None):
+    """Get a boto3 CloudFront client.
+    
+    Args:
+        session_context: Optional session key for cross-account access
+        
+    Returns:
+        boto3 CloudFront client
+    """
+    return get_client("cloudfront", session_context=session_context)
 
 
-def list_distributions(max_items: Union[int, str] = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_distributions(max_items: Union[int, str] = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List CloudFront distributions with pagination support.
     
     Args:
         max_items: Maximum number of distributions to return (can be int or str)
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing distributions and pagination information
@@ -30,7 +40,7 @@ def list_distributions(max_items: Union[int, str] = 100, next_token: Optional[st
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     distributions = []
     
     try:
@@ -88,16 +98,17 @@ def list_distributions(max_items: Union[int, str] = 100, next_token: Optional[st
         }
 
 
-def get_distribution(distribution_id: str) -> Dict:
+def get_distribution(distribution_id: str, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific CloudFront distribution.
     
     Args:
         distribution_id: The ID of the distribution
+        session_context: Optional session key for cross-account access
         
     Returns:
         Distribution details dictionary
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     
     try:
         response = client.get_distribution(Id=distribution_id)
@@ -107,16 +118,17 @@ def get_distribution(distribution_id: str) -> Dict:
         return {}
 
 
-def get_distribution_config(distribution_id: str) -> Dict:
+def get_distribution_config(distribution_id: str, session_context: Optional[str] = None) -> Dict:
     """Get configuration for a specific CloudFront distribution.
     
     Args:
         distribution_id: The ID of the distribution
+        session_context: Optional session key for cross-account access
         
     Returns:
         Distribution configuration dictionary
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     
     try:
         response = client.get_distribution_config(Id=distribution_id)
@@ -126,22 +138,23 @@ def get_distribution_config(distribution_id: str) -> Dict:
         return {}
 
 
-def get_distribution_tags(distribution_id: str) -> Dict[str, str]:
+def get_distribution_tags(distribution_id: str, session_context: Optional[str] = None) -> Dict[str, str]:
     """Get tags for a specific CloudFront distribution.
     
     Args:
         distribution_id: The ID of the distribution
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary of tag key-value pairs
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     tags = {}
     
     try:
         # Construct the ARN for the distribution
         # CloudFront ARNs have the format: arn:aws:cloudfront::account-id:distribution/distribution-id
-        response = client.list_tags_for_resource(Resource=f"arn:aws:cloudfront::{get_account_id()}:distribution/{distribution_id}")
+        response = client.list_tags_for_resource(Resource=f"arn:aws:cloudfront::{get_account_id(session_context)}:distribution/{distribution_id}")
         tag_items = response.get('Tags', {}).get('Items', [])
         
         for tag in tag_items:
@@ -156,12 +169,13 @@ def get_distribution_tags(distribution_id: str) -> Dict[str, str]:
         return {}
 
 
-def list_cache_policies(max_items: int = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_cache_policies(max_items: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List CloudFront cache policies with pagination support.
     
     Args:
         max_items: Maximum number of policies to return
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing policies and pagination information
@@ -171,7 +185,7 @@ def list_cache_policies(max_items: int = 100, next_token: Optional[str] = None) 
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     policies = []
     
     try:
@@ -204,12 +218,13 @@ def list_cache_policies(max_items: int = 100, next_token: Optional[str] = None) 
         }
 
 
-def list_origin_request_policies(max_items: int = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_origin_request_policies(max_items: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List CloudFront origin request policies with pagination support.
     
     Args:
         max_items: Maximum number of policies to return
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing policies and pagination information
@@ -219,7 +234,7 @@ def list_origin_request_policies(max_items: int = 100, next_token: Optional[str]
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     policies = []
     
     try:
@@ -252,43 +267,49 @@ def list_origin_request_policies(max_items: int = 100, next_token: Optional[str]
         }
 
 
-def get_account_id() -> str:
+def get_account_id(session_context: Optional[str] = None) -> str:
     """Get the current AWS account ID.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         AWS account ID string
     """
     try:
-        return boto3.client('sts').get_caller_identity().get('Account', '')
+        sts_client = get_client("sts", session_context=session_context)
+        return sts_client.get_caller_identity().get('Account', '')
     except ClientError as e:
         logger.error(f"Error getting AWS account ID: {e}")
         return ''
 
 
-def get_all_distributions(max_items: Union[int, str] = '100', next_token: Optional[str] = None) -> Dict[str, Any]:
+def get_all_distributions(max_items: Union[int, str] = '100', next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Compatibility wrapper for list_distributions.
     
     Args:
         max_items: Maximum number of distributions to return (as string or int)
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing distributions and pagination information
     """
     # Pass the parameters directly, list_distributions now handles type conversion internally
-    return list_distributions(max_items=max_items, next_token=next_token)
+    return list_distributions(max_items=max_items, next_token=next_token, session_context=session_context)
 
 
-def get_cache_policy(policy_id: str) -> Dict:
+def get_cache_policy(policy_id: str, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific CloudFront cache policy.
     
     Args:
         policy_id: The ID of the cache policy
+        session_context: Optional session key for cross-account access
         
     Returns:
         Cache policy details dictionary
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     
     try:
         response = client.get_cache_policy(Id=policy_id)
@@ -298,16 +319,17 @@ def get_cache_policy(policy_id: str) -> Dict:
         return {}
 
 
-def get_origin_request_policy(policy_id: str) -> Dict:
+def get_origin_request_policy(policy_id: str, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific CloudFront origin request policy.
     
     Args:
         policy_id: The ID of the origin request policy
+        session_context: Optional session key for cross-account access
         
     Returns:
         Origin request policy details dictionary
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     
     try:
         response = client.get_origin_request_policy(Id=policy_id)
@@ -317,12 +339,13 @@ def get_origin_request_policy(policy_id: str) -> Dict:
         return {}
 
 
-def list_response_headers_policies(max_items: Union[int, str] = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_response_headers_policies(max_items: Union[int, str] = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List CloudFront response headers policies with pagination support.
     
     Args:
         max_items: Maximum number of policies to return (can be int or str)
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing policies and pagination information
@@ -332,7 +355,7 @@ def list_response_headers_policies(max_items: Union[int, str] = 100, next_token:
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     policies = []
     
     try:
@@ -368,16 +391,17 @@ def list_response_headers_policies(max_items: Union[int, str] = 100, next_token:
         }
 
 
-def get_response_headers_policy(policy_id: str) -> Dict:
+def get_response_headers_policy(policy_id: str, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific CloudFront response headers policy.
     
     Args:
         policy_id: The ID of the response headers policy
+        session_context: Optional session key for cross-account access
         
     Returns:
         Response headers policy details dictionary
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     
     try:
         response = client.get_response_headers_policy(Id=policy_id)
@@ -387,17 +411,71 @@ def get_response_headers_policy(policy_id: str) -> Dict:
         return {}
 
 
-def search_distribution(identifier: str) -> Dict[str, Any]:
+def list_invalidations(distribution_id: str, max_items: Union[int, str] = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
+    """List invalidations for a specific CloudFront distribution.
+    
+    Args:
+        distribution_id: The ID of the distribution
+        max_items: Maximum number of invalidations to return (can be int or str)
+        next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
+        
+    Returns:
+        Dictionary containing invalidations and pagination information
+        {
+            "invalidations": [...],  # List of invalidation dictionaries
+            "next_token": "string",  # Token for next page or None if no more pages
+            "is_truncated": bool     # Whether there are more items
+        }
+    """
+    client = get_cloudfront_client(session_context)
+    invalidations = []
+    
+    try:
+        # Convert max_items to string as expected by the API
+        max_items_str = str(max_items)
+        
+        # Initial request parameters
+        params = {'DistributionId': distribution_id, 'MaxItems': max_items_str}
+        
+        if next_token:
+            params['Marker'] = next_token
+            
+        response = client.list_invalidations(**params)
+        invalidation_list = response.get('InvalidationList', {})
+        items = invalidation_list.get('Items', [])
+        invalidations.extend(items)
+        
+        # Check if we have more items
+        is_truncated = invalidation_list.get('IsTruncated', False)
+        next_marker = invalidation_list.get('NextMarker')
+        
+        return {
+            "invalidations": invalidations,
+            "next_token": next_marker if is_truncated else None,
+            "is_truncated": is_truncated
+        }
+    except ClientError as e:
+        logger.error(f"Error listing CloudFront invalidations for distribution {distribution_id}: {e}")
+        return {
+            "invalidations": [],
+            "next_token": None,
+            "is_truncated": False
+        }
+
+
+def search_distribution(identifier: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Search for a CloudFront distribution by domain name, ID, or alias.
     
     Args:
         identifier: CloudFront domain name (e.g., d1234abcdef8ghi.cloudfront.net),
                   distribution ID, or alias domain
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing the distribution details if found, empty dict otherwise
     """
-    client = get_cloudfront_client()
+    client = get_cloudfront_client(session_context)
     
     try:
         # First try: if the identifier is a distribution ID, get it directly
@@ -421,13 +499,13 @@ def search_distribution(identifier: str) -> Dict[str, Any]:
                 # Check if domain name matches
                 if distribution.get('DomainName') == identifier:
                     # We found a match by domain name, return complete distribution details
-                    return get_distribution(distribution.get('Id'))
+                    return get_distribution(distribution.get('Id'), session_context)
                 
                 # Check if any alias matches
                 aliases = distribution.get('Aliases', {}).get('Items', [])
                 if identifier in aliases:
                     # We found a match by alias, return complete distribution details
-                    return get_distribution(distribution.get('Id'))
+                    return get_distribution(distribution.get('Id'), session_context)
         
         # Not found
         logger.info(f"No CloudFront distribution found with identifier: {identifier}")

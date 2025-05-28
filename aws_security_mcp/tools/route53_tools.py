@@ -18,13 +18,14 @@ except ImportError:
     logger.warning("EC2 services module not available for IP lookups")
 
 
-@register_tool()
-async def list_hosted_zones(limit: int = 100, next_token: Optional[str] = None) -> str:
+@register_tool("list_hosted_zones")
+async def list_hosted_zones(limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List Route53 hosted zones in the AWS account.
     
     Args:
         limit: Maximum number of hosted zones to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with Route53 hosted zones information
@@ -32,7 +33,7 @@ async def list_hosted_zones(limit: int = 100, next_token: Optional[str] = None) 
     logger.info(f"Listing Route53 hosted zones (limit={limit}, next_token={next_token})")
     
     try:
-        response = route53.list_hosted_zones(max_items=limit, next_token=next_token)
+        response = route53.list_hosted_zones(max_items=limit, next_token=next_token, session_context=session_context)
         zones = response.get("zones", [])
         next_token = response.get("next_token")
         is_truncated = response.get("is_truncated", False)
@@ -81,12 +82,13 @@ async def list_hosted_zones(limit: int = 100, next_token: Optional[str] = None) 
         })
 
 
-@register_tool()
-async def get_hosted_zone_details(zone_id: str) -> str:
+@register_tool("get_hosted_zone_details")
+async def get_hosted_zone_details(zone_id: str, session_context: Optional[str] = None) -> str:
     """Get detailed information about a specific Route53 hosted zone.
     
     Args:
         zone_id: ID of the Route53 hosted zone (can include or exclude '/hostedzone/' prefix)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with hosted zone details
@@ -98,7 +100,7 @@ async def get_hosted_zone_details(zone_id: str) -> str:
         zone_id = f'/hostedzone/{zone_id}'
     
     try:
-        zone = route53.get_hosted_zone(zone_id)
+        zone = route53.get_hosted_zone(zone_id, session_context=session_context)
         
         if not zone:
             clean_id = zone_id.replace('/hostedzone/', '')
@@ -147,7 +149,7 @@ async def get_hosted_zone_details(zone_id: str) -> str:
                 })
         
         # Get tags
-        tags = route53.get_hosted_zone_tags(zone_id)
+        tags = route53.get_hosted_zone_tags(zone_id, session_context=session_context)
         if tags:
             result["tags"] = tags
         
@@ -163,14 +165,15 @@ async def get_hosted_zone_details(zone_id: str) -> str:
         })
 
 
-@register_tool()
-async def list_resource_record_sets(zone_id: str, limit: int = 100, next_token: Optional[str] = None) -> str:
+@register_tool("list_resource_record_sets")
+async def list_resource_record_sets(zone_id: str, limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List resource record sets in a specific Route53 hosted zone.
     
     Args:
         zone_id: ID of the Route53 hosted zone (can include or exclude '/hostedzone/' prefix)
         limit: Maximum number of record sets to return per page (default: 100)
         next_token: Pagination token from a previous request (optional)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with resource record sets and pagination information
@@ -182,7 +185,7 @@ async def list_resource_record_sets(zone_id: str, limit: int = 100, next_token: 
         zone_id = f'/hostedzone/{zone_id}'
     
     try:
-        response = route53.list_resource_record_sets(zone_id, max_items=limit, next_marker=next_token)
+        response = route53.list_resource_record_sets(zone_id, max_items=limit, next_marker=next_token, session_context=session_context)
         records = response.get('records', [])
         next_marker = response.get('next_marker')
         is_truncated = response.get('is_truncated', False)
@@ -268,13 +271,14 @@ async def list_resource_record_sets(zone_id: str, limit: int = 100, next_token: 
         })
 
 
-@register_tool()
-async def list_health_checks(limit: int = 100, next_token: Optional[str] = None) -> str:
+@register_tool("list_health_checks")
+async def list_health_checks(limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List Route53 health checks in the AWS account.
     
     Args:
         limit: Maximum number of health checks to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with Route53 health checks
@@ -282,9 +286,9 @@ async def list_health_checks(limit: int = 100, next_token: Optional[str] = None)
     logger.info(f"Listing Route53 health checks (limit={limit}, next_token={next_token})")
     
     try:
-        health_checks_response = route53.list_health_checks(max_items=limit, marker=next_token)
+        health_checks_response = route53.list_health_checks(max_items=limit, next_token=next_token, session_context=session_context)
         health_checks = health_checks_response.get('health_checks', [])
-        next_marker = health_checks_response.get('marker')
+        next_marker = health_checks_response.get('next_token')
         is_truncated = health_checks_response.get('is_truncated', False)
         
         if not health_checks:
@@ -363,13 +367,14 @@ async def list_health_checks(limit: int = 100, next_token: Optional[str] = None)
         })
 
 
-@register_tool()
-async def list_traffic_policies(limit: int = 100, next_token: Optional[str] = None) -> str:
+@register_tool("list_traffic_policies")
+async def list_traffic_policies(limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List Route53 traffic policies in the AWS account.
     
     Args:
         limit: Maximum number of traffic policies to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with Route53 traffic policies
@@ -377,9 +382,9 @@ async def list_traffic_policies(limit: int = 100, next_token: Optional[str] = No
     logger.info(f"Listing Route53 traffic policies (limit={limit}, next_token={next_token})")
     
     try:
-        policies_response = route53.list_traffic_policies(max_items=limit, traffic_policy_id_marker=next_token)
+        policies_response = route53.list_traffic_policies(max_items=limit, next_token=next_token, session_context=session_context)
         policies = policies_response.get('policies', [])
-        next_marker = policies_response.get('traffic_policy_id_marker')
+        next_marker = policies_response.get('next_token')
         is_truncated = policies_response.get('is_truncated', False)
         
         if not policies:
@@ -431,8 +436,8 @@ async def list_traffic_policies(limit: int = 100, next_token: Optional[str] = No
         })
 
 
-@register_tool()
-async def check_subdomain_takeover_vulnerability(domain_name: str) -> str:
+@register_tool("check_subdomain_takeover_vulnerability")
+async def check_subdomain_takeover_vulnerability(domain_name: str, session_context: Optional[str] = None) -> str:
     """Check if a specific domain or subdomain is vulnerable to subdomain takeover attacks.
     
     This function performs a DNS-based analysis for subdomain takeover vulnerabilities:
@@ -442,6 +447,7 @@ async def check_subdomain_takeover_vulnerability(domain_name: str) -> str:
     
     Args:
         domain_name: The domain or subdomain name to check (e.g., xyz.dreamplug.in)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with vulnerability assessment results
@@ -737,8 +743,8 @@ async def check_subdomain_takeover_vulnerability(domain_name: str) -> str:
         })
 
 
-@register_tool()
-async def find_ip_address_details(ip_address: str) -> str:
+@register_tool("find_ip_address_details")
+async def find_ip_address_details(ip_address: str, session_context: Optional[str] = None) -> str:
     """Find details about an IP address, including associated EC2 resources and DNS records pointing to it.
     
     This function:
@@ -748,6 +754,7 @@ async def find_ip_address_details(ip_address: str) -> str:
     
     Args:
         ip_address: The IP address to lookup (e.g., 43.205.186.36)
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with IP address details and associated resources
@@ -769,12 +776,12 @@ async def find_ip_address_details(ip_address: str) -> str:
             # Look for instances with this public IP
             instances.extend(ec2.describe_instances(filters=[
                 {"Name": "public-ip", "Values": [ip_address]}
-            ]))
+            ], session_context=session_context))
             
             # Also check for instances with this private IP
             instances.extend(ec2.describe_instances(filters=[
                 {"Name": "private-ip-address", "Values": [ip_address]}
-            ]))
+            ], session_context=session_context))
             
             # Deduplicate instances
             seen_ids = set()
@@ -814,12 +821,12 @@ async def find_ip_address_details(ip_address: str) -> str:
             # Look for network interfaces with this IP
             interfaces = ec2.describe_network_interfaces(filters=[
                 {"Name": "addresses.private-ip-address", "Values": [ip_address]}
-            ])
+            ], session_context=session_context)
             
             # Also check for interfaces with public IP
             public_interfaces = ec2.describe_network_interfaces(filters=[
                 {"Name": "association.public-ip", "Values": [ip_address]}
-            ])
+            ], session_context=session_context)
             
             interfaces.extend(public_interfaces)
             
@@ -867,7 +874,7 @@ async def find_ip_address_details(ip_address: str) -> str:
         # Find Route53 records pointing to this IP
         try:
             # Get all hosted zones
-            hosted_zones_response = route53.list_hosted_zones(max_items=100)
+            hosted_zones_response = route53.list_hosted_zones(max_items=100, session_context=session_context)
             zones = hosted_zones_response.get('zones', [])
             
             matching_records = []
@@ -881,7 +888,7 @@ async def find_ip_address_details(ip_address: str) -> str:
                     continue
                 
                 # Get records for this zone
-                records_response = route53.list_resource_record_sets(zone_id, max_items=300)
+                records_response = route53.list_resource_record_sets(zone_id, max_items=300, session_context=session_context)
                 records = records_response.get('records', [])
                 
                 # Find A records matching this IP
@@ -933,13 +940,12 @@ async def find_ip_address_details(ip_address: str) -> str:
             "error": {
                 "message": f"Error looking up details for IP {ip_address}: {str(e)}",
                 "type": type(e).__name__
-            },
-            "ip_address": ip_address
+            }
         })
 
 
-@register_tool()
-async def analyze_domain_security(domain_name: str) -> str:
+@register_tool("analyze_domain_security")
+async def analyze_domain_security(domain_name: str, session_context: Optional[str] = None) -> str:
     """Analyze the security posture of a domain, including its DNS configuration and associated resources.
     
     This function:
@@ -950,6 +956,7 @@ async def analyze_domain_security(domain_name: str) -> str:
     
     Args:
         domain_name: The domain name to analyze
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON string with security analysis results
@@ -1126,7 +1133,7 @@ async def analyze_domain_security(domain_name: str) -> str:
                 # Check for EC2 instances with this IP
                 instances = ec2.describe_instances(filters=[
                     {"Name": "public-ip", "Values": [ip]}
-                ])
+                ], session_context=session_context)
                 
                 for instance in instances:
                     instance_id = instance.get('InstanceId')

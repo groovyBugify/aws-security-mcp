@@ -16,17 +16,20 @@ from aws_security_mcp.formatters.ecs_formatter import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def list_ecs_clusters() -> Dict[str, Any]:
+async def list_ecs_clusters(session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all ECS clusters in the AWS account.
     
     This tool retrieves all ECS clusters and provides information about their
     configuration and security settings.
     
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+    
     Returns:
         Dict containing ECS clusters information
     """
-    logger.info("Listing ECS clusters")
-    result = await ecs.get_clusters()
+    logger.info(f"Listing ECS clusters (session_context={session_context})")
+    result = await ecs.get_clusters(session_context=session_context)
     
     if result["success"]:
         # Apply security-focused formatting to reduce response size
@@ -36,7 +39,7 @@ async def list_ecs_clusters() -> Dict[str, Any]:
     return result
 
 @register_tool()
-async def list_ecs_task_definitions(family_prefix: Optional[str] = None, status: str = "ACTIVE") -> Dict[str, Any]:
+async def list_ecs_task_definitions(family_prefix: Optional[str] = None, status: str = "ACTIVE", session_context: Optional[str] = None) -> Dict[str, Any]:
     """List ECS task definitions with their security configurations.
     
     This tool retrieves all task definitions and extracts security-relevant configurations
@@ -45,12 +48,13 @@ async def list_ecs_task_definitions(family_prefix: Optional[str] = None, status:
     Args:
         family_prefix: Optional family name prefix to filter task definitions
         status: Task definition status to filter by (ACTIVE or INACTIVE)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing task definitions with security information
     """
-    logger.info(f"Listing ECS task definitions with status {status}")
-    result = await ecs.get_task_definitions(family_prefix, status)
+    logger.info(f"Listing ECS task definitions with status {status} (session_context={session_context})")
+    result = await ecs.get_task_definitions(family_prefix, status, session_context=session_context)
     
     if result["success"]:
         # Apply security-focused formatting to reduce response size
@@ -60,7 +64,7 @@ async def list_ecs_task_definitions(family_prefix: Optional[str] = None, status:
     return result
 
 @register_tool()
-async def get_ecs_task_definition(task_definition: str, cluster: Optional[str] = None) -> Dict[str, Any]:
+async def get_ecs_task_definition(task_definition: str, cluster: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about the latest active ECS task definition with running tasks.
     
     This tool focuses on finding task definitions that are currently in use. When a family
@@ -70,12 +74,13 @@ async def get_ecs_task_definition(task_definition: str, cluster: Optional[str] =
     Args:
         task_definition: The task definition family name, ARN, or family:revision
         cluster: Optional cluster name to check for running tasks (if not provided, checks all clusters)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing detailed task definition information with a flag indicating if it has running tasks
     """
-    logger.info(f"Getting active ECS task definition: {task_definition}" + (f" in cluster: {cluster}" if cluster else ""))
-    result = await ecs.get_task_definition(task_definition, cluster)
+    logger.info(f"Getting active ECS task definition: {task_definition}" + (f" in cluster: {cluster}" if cluster else "") + f" (session_context={session_context})")
+    result = await ecs.get_task_definition(task_definition, cluster, session_context=session_context)
     
     if result["success"] and result.get("taskDefinition"):
         # Apply security-focused formatting to reduce response size
@@ -84,7 +89,7 @@ async def get_ecs_task_definition(task_definition: str, cluster: Optional[str] =
     return result
 
 @register_tool()
-async def list_ecs_services(cluster: str) -> Dict[str, Any]:
+async def list_ecs_services(cluster: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List ECS services for a specific cluster with security details.
     
     This tool retrieves all services in the specified cluster and extracts security-relevant
@@ -92,12 +97,13 @@ async def list_ecs_services(cluster: str) -> Dict[str, Any]:
     
     Args:
         cluster: The ECS cluster ARN or name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing services with security information
     """
-    logger.info(f"Listing ECS services for cluster: {cluster}")
-    result = await ecs.get_services(cluster)
+    logger.info(f"Listing ECS services for cluster: {cluster} (session_context={session_context})")
+    result = await ecs.get_services(cluster, session_context=session_context)
     
     if result["success"]:
         # Apply security-focused formatting to reduce response size
@@ -107,7 +113,7 @@ async def list_ecs_services(cluster: str) -> Dict[str, Any]:
     return result
 
 @register_tool()
-async def list_ecs_tasks(cluster: str, service: Optional[str] = None) -> Dict[str, Any]:
+async def list_ecs_tasks(cluster: str, service: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List ECS tasks for a specific cluster or service with security details.
     
     This tool retrieves all tasks in the specified cluster or service and extracts
@@ -117,12 +123,13 @@ async def list_ecs_tasks(cluster: str, service: Optional[str] = None) -> Dict[st
     Args:
         cluster: The ECS cluster ARN or name
         service: Optional service name to filter tasks
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing tasks with security information
     """
-    logger.info(f"Listing ECS tasks for cluster: {cluster}" + (f" and service: {service}" if service else ""))
-    result = await ecs.get_tasks(cluster, service)
+    logger.info(f"Listing ECS tasks for cluster: {cluster}" + (f" and service: {service}" if service else "") + f" (session_context={session_context})")
+    result = await ecs.get_tasks(cluster, service, session_context=session_context)
     
     if result["success"]:
         # Apply security-focused formatting to reduce response size
@@ -132,7 +139,7 @@ async def list_ecs_tasks(cluster: str, service: Optional[str] = None) -> Dict[st
     return result
 
 @register_tool()
-async def list_ecs_container_instances(cluster: str) -> Dict[str, Any]:
+async def list_ecs_container_instances(cluster: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List ECS container instances for a specific cluster with security details.
     
     This tool retrieves all container instances in the specified cluster and extracts
@@ -141,12 +148,13 @@ async def list_ecs_container_instances(cluster: str) -> Dict[str, Any]:
     
     Args:
         cluster: The ECS cluster ARN or name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing container instances with security information
     """
-    logger.info(f"Listing ECS container instances for cluster: {cluster}")
-    result = await ecs.get_container_instances(cluster)
+    logger.info(f"Listing ECS container instances for cluster: {cluster} (session_context={session_context})")
+    result = await ecs.get_container_instances(cluster, session_context=session_context)
     
     if result["success"]:
         # Apply security-focused formatting to reduce response size
@@ -156,7 +164,7 @@ async def list_ecs_container_instances(cluster: str) -> Dict[str, Any]:
     return result
 
 @register_tool()
-async def get_ecs_service(cluster: str, service: str) -> Dict[str, Any]:
+async def get_ecs_service(cluster: str, service: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific ECS service.
     
     This tool retrieves comprehensive details about a specified service in a cluster
@@ -165,12 +173,13 @@ async def get_ecs_service(cluster: str, service: str) -> Dict[str, Any]:
     Args:
         cluster: The ECS cluster ARN or name
         service: The service ARN or name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing detailed service information
     """
-    logger.info(f"Getting ECS service: {service} in cluster: {cluster}")
-    result = await ecs.get_service(cluster, service)
+    logger.info(f"Getting ECS service: {service} in cluster: {cluster} (session_context={session_context})")
+    result = await ecs.get_service(cluster, service, session_context=session_context)
     
     if result["success"] and result.get("service"):
         # Apply security-focused formatting to reduce response size
@@ -179,7 +188,7 @@ async def get_ecs_service(cluster: str, service: str) -> Dict[str, Any]:
     return result
 
 @register_tool()
-async def get_ecs_task(cluster: str, task: str) -> Dict[str, Any]:
+async def get_ecs_task(cluster: str, task: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific ECS task.
     
     This tool retrieves comprehensive details about a specified task in a cluster
@@ -188,12 +197,13 @@ async def get_ecs_task(cluster: str, task: str) -> Dict[str, Any]:
     Args:
         cluster: The ECS cluster ARN or name
         task: The task ARN or ID
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing detailed task information
     """
-    logger.info(f"Getting ECS task: {task} in cluster: {cluster}")
-    result = await ecs.get_task(cluster, task)
+    logger.info(f"Getting ECS task: {task} in cluster: {cluster} (session_context={session_context})")
+    result = await ecs.get_task(cluster, task, session_context=session_context)
     
     if result["success"] and result.get("task"):
         # Apply security-focused formatting to reduce response size

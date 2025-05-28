@@ -24,7 +24,7 @@ from aws_security_mcp.tools.cloudfront_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def cloudfront_operations(operation: str, **params) -> str:
+async def cloudfront_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """CloudFront Operations Hub - Comprehensive content delivery network management and monitoring.
     
     ☁️ DISTRIBUTION DISCOVERY:
@@ -63,8 +63,12 @@ async def cloudfront_operations(operation: str, **params) -> str:
     📊 Get detailed distribution info by domain:
     operation="get_distribution_details", distribution_id="d1234abcdef8ghi.cloudfront.net"
     
+    🌐 Cross-account operations:
+    operation="list_distributions", session_context="123456789012_aws_dev"
+    
     Args:
         operation: The CloudFront operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
         # Distribution parameters:
         distribution_id: ID of the CloudFront distribution (or domain name)
@@ -76,9 +80,16 @@ async def cloudfront_operations(operation: str, **params) -> str:
         
     Returns:
         JSON formatted response with operation results and CloudFront insights
+        
+    Examples:
+        # Single account (default)
+        cloudfront_operations(operation="list_distributions")
+        
+        # Cross-account access
+        cloudfront_operations(operation="list_distributions", session_context="123456789012_aws_dev")
     """
     
-    logger.info(f"CloudFront operation requested: {operation}")
+    logger.info(f"CloudFront operation requested: {operation} (session_context={session_context})")
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -91,7 +102,8 @@ async def cloudfront_operations(operation: str, **params) -> str:
             
             return await _list_distributions(
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "get_distribution_details":
@@ -102,7 +114,10 @@ async def cloudfront_operations(operation: str, **params) -> str:
                     "usage": "operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7'"
                 })
             
-            return await _get_distribution_details(distribution_id=distribution_id)
+            return await _get_distribution_details(
+                distribution_id=distribution_id,
+                session_context=session_context
+            )
             
         elif operation == "search_distribution":
             identifier = params.get("identifier")
@@ -112,7 +127,10 @@ async def cloudfront_operations(operation: str, **params) -> str:
                     "usage": "operation='search_distribution', identifier='example.com'"
                 })
             
-            return await _search_distribution(identifier=identifier)
+            return await _search_distribution(
+                identifier=identifier,
+                session_context=session_context
+            )
             
         elif operation == "list_cache_policies":
             limit = params.get("limit", 100)
@@ -120,7 +138,8 @@ async def cloudfront_operations(operation: str, **params) -> str:
             
             return await _list_cache_policies(
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "list_origin_request_policies":
@@ -129,7 +148,8 @@ async def cloudfront_operations(operation: str, **params) -> str:
             
             return await _list_origin_request_policies(
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "list_response_headers_policies":
@@ -138,7 +158,8 @@ async def cloudfront_operations(operation: str, **params) -> str:
             
             return await _list_response_headers_policies(
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "get_distribution_invalidations":
@@ -155,7 +176,8 @@ async def cloudfront_operations(operation: str, **params) -> str:
             return await _get_distribution_invalidations(
                 distribution_id=distribution_id,
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         else:
@@ -172,7 +194,8 @@ async def cloudfront_operations(operation: str, **params) -> str:
                 "usage_examples": {
                     "list_distributions": "operation='list_distributions'",
                     "search_distribution": "operation='search_distribution', identifier='example.com'",
-                    "get_distribution_details": "operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7'"
+                    "get_distribution_details": "operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7'",
+                    "cross_account": "operation='list_distributions', session_context='123456789012_aws_dev'"
                 }
             })
             
@@ -183,26 +206,46 @@ async def cloudfront_operations(operation: str, **params) -> str:
                 "message": f"Error executing CloudFront operation '{operation}': {str(e)}",
                 "type": type(e).__name__,
                 "operation": operation,
-                "parameters": params
+                "parameters": params,
+                "session_context": session_context
             }
         })
 
 @register_tool()
-async def discover_cloudfront_operations() -> str:
+async def discover_cloudfront_operations(session_context: Optional[str] = None) -> str:
     """Discover all available CloudFront operations with detailed usage examples.
     
     This tool provides comprehensive documentation of CloudFront operations available
     through the cloudfront_operations tool, including parameter requirements
     and practical usage examples.
     
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+    
     Returns:
         Detailed catalog of CloudFront operations with examples and parameter descriptions
+        
+    Examples:
+        # Single account (default)
+        discover_cloudfront_operations()
+        
+        # Cross-account access
+        discover_cloudfront_operations(session_context="123456789012_aws_dev")
     """
     
     operations_catalog = {
         "service": "AWS CloudFront",
         "description": "Content Delivery Network (CDN) distribution management and monitoring",
         "wrapper_tool": "cloudfront_operations",
+        "session_context_support": True,
+        "cross_account_access": {
+            "description": "All operations support cross-account access via session_context parameter",
+            "usage": "session_context='123456789012_aws_dev'",
+            "examples": [
+                "cloudfront_operations(operation='list_distributions', session_context='123456789012_aws_dev')",
+                "cloudfront_operations(operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7', session_context='123456789012_aws_dev')"
+            ]
+        },
         "supported_features": {
             "distributions": "Manage and monitor CloudFront distributions",
             "policies": "Cache, origin request, and response headers policies",
@@ -216,33 +259,37 @@ async def discover_cloudfront_operations() -> str:
                     "description": "List all CloudFront distributions with optional pagination",
                     "parameters": {
                         "limit": {"type": "int", "default": 1000, "description": "Maximum number of distributions to return"},
-                        "next_token": {"type": "str", "description": "Pagination token for continued results"}
+                        "next_token": {"type": "str", "description": "Pagination token for continued results"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='list_distributions')",
                         "cloudfront_operations(operation='list_distributions', limit=50)",
-                        "cloudfront_operations(operation='list_distributions', next_token='token123')"
+                        "cloudfront_operations(operation='list_distributions', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "get_distribution_details": {
                     "description": "Get detailed information about a specific CloudFront distribution",
                     "parameters": {
-                        "distribution_id": {"type": "str", "required": True, "description": "Distribution ID or CloudFront domain name"}
+                        "distribution_id": {"type": "str", "required": True, "description": "Distribution ID or CloudFront domain name"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7')",
-                        "cloudfront_operations(operation='get_distribution_details', distribution_id='d1234abcdef8ghi.cloudfront.net')"
+                        "cloudfront_operations(operation='get_distribution_details', distribution_id='d1234abcdef8ghi.cloudfront.net')",
+                        "cloudfront_operations(operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "search_distribution": {
                     "description": "Search for distributions by domain name, distribution ID, or alias",
                     "parameters": {
-                        "identifier": {"type": "str", "required": True, "description": "Domain name, distribution ID, or alias to search for"}
+                        "identifier": {"type": "str", "required": True, "description": "Domain name, distribution ID, or alias to search for"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='search_distribution', identifier='example.com')",
                         "cloudfront_operations(operation='search_distribution', identifier='E1A2B3C4D5E6F7')",
-                        "cloudfront_operations(operation='search_distribution', identifier='d1234abcdef8ghi.cloudfront.net')"
+                        "cloudfront_operations(operation='search_distribution', identifier='example.com', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -251,33 +298,39 @@ async def discover_cloudfront_operations() -> str:
                     "description": "List available CloudFront cache policies",
                     "parameters": {
                         "limit": {"type": "int", "default": 100, "description": "Maximum number of policies to return"},
-                        "next_token": {"type": "str", "description": "Pagination token for continued results"}
+                        "next_token": {"type": "str", "description": "Pagination token for continued results"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='list_cache_policies')",
-                        "cloudfront_operations(operation='list_cache_policies', limit=20)"
+                        "cloudfront_operations(operation='list_cache_policies', limit=20)",
+                        "cloudfront_operations(operation='list_cache_policies', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "list_origin_request_policies": {
                     "description": "List CloudFront origin request policies",
                     "parameters": {
                         "limit": {"type": "int", "default": 100, "description": "Maximum number of policies to return"},
-                        "next_token": {"type": "str", "description": "Pagination token for continued results"}
+                        "next_token": {"type": "str", "description": "Pagination token for continued results"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='list_origin_request_policies')",
-                        "cloudfront_operations(operation='list_origin_request_policies', limit=20)"
+                        "cloudfront_operations(operation='list_origin_request_policies', limit=20)",
+                        "cloudfront_operations(operation='list_origin_request_policies', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "list_response_headers_policies": {
                     "description": "List CloudFront response headers policies",
                     "parameters": {
                         "limit": {"type": "int", "default": 100, "description": "Maximum number of policies to return"},
-                        "next_token": {"type": "str", "description": "Pagination token for continued results"}
+                        "next_token": {"type": "str", "description": "Pagination token for continued results"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='list_response_headers_policies')",
-                        "cloudfront_operations(operation='list_response_headers_policies', limit=20)"
+                        "cloudfront_operations(operation='list_response_headers_policies', limit=20)",
+                        "cloudfront_operations(operation='list_response_headers_policies', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -287,11 +340,13 @@ async def discover_cloudfront_operations() -> str:
                     "parameters": {
                         "distribution_id": {"type": "str", "required": True, "description": "Distribution ID"},
                         "limit": {"type": "int", "default": 100, "description": "Maximum number of invalidations to return"},
-                        "next_token": {"type": "str", "description": "Pagination token for continued results"}
+                        "next_token": {"type": "str", "description": "Pagination token for continued results"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "cloudfront_operations(operation='get_distribution_invalidations', distribution_id='E1A2B3C4D5E6F7')",
-                        "cloudfront_operations(operation='get_distribution_invalidations', distribution_id='E1A2B3C4D5E6F7', limit=10)"
+                        "cloudfront_operations(operation='get_distribution_invalidations', distribution_id='E1A2B3C4D5E6F7', limit=10)",
+                        "cloudfront_operations(operation='get_distribution_invalidations', distribution_id='E1A2B3C4D5E6F7', session_context='123456789012_aws_dev')"
                     ]
                 }
             }
@@ -302,6 +357,11 @@ async def discover_cloudfront_operations() -> str:
                 "Find distribution by domain: operation='search_distribution', identifier='example.com'",
                 "Get distribution details: operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7'",
                 "Check invalidations: operation='get_distribution_invalidations', distribution_id='E1A2B3C4D5E6F7'"
+            ],
+            "cross_account_examples": [
+                "List distributions in dev account: operation='list_distributions', session_context='123456789012_aws_dev'",
+                "Get distribution details in prod account: operation='get_distribution_details', distribution_id='E1A2B3C4D5E6F7', session_context='987654321098_aws_prod'",
+                "Search distribution in staging account: operation='search_distribution', identifier='staging.example.com', session_context='456789012345_aws_staging'"
             ],
             "monitoring_best_practices": [
                 "Regularly review distribution configurations for security compliance",

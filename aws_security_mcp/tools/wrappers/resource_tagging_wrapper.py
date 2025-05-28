@@ -20,7 +20,7 @@ from aws_security_mcp.tools.resource_tagging_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def resource_tagging_operations(operation: str, **params) -> str:
+async def resource_tagging_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Resource Tagging Operations Hub - Comprehensive AWS resource discovery and inventory management through tags.
     
     🏷️ RESOURCE DISCOVERY:
@@ -55,8 +55,12 @@ async def resource_tagging_operations(operation: str, **params) -> str:
     📈 Large-scale inventory:
     operation="search_resources_by_tag", tag_key="CostCenter", group_by_type=true
     
+    🔄 Cross-account access:
+    operation="search_resources_by_tag", tag_key="Environment", session_context="123456789012_aws_dev"
+    
     Args:
         operation: The resource tagging operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
         # Search parameters:
         tag_key: The tag key to search for (required for search and tag value operations)
@@ -99,7 +103,8 @@ async def resource_tagging_operations(operation: str, **params) -> str:
                 resource_types=resource_types,
                 next_token=next_token,
                 max_items=max_items,
-                group_by_type=group_by_type
+                group_by_type=group_by_type,
+                session_context=session_context
             )
             
         elif operation == "get_all_tag_keys":
@@ -108,7 +113,8 @@ async def resource_tagging_operations(operation: str, **params) -> str:
             
             return await _get_all_tag_keys(
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         elif operation == "get_tag_values_for_key":
@@ -125,7 +131,8 @@ async def resource_tagging_operations(operation: str, **params) -> str:
             return await _get_tag_values_for_key(
                 tag_key=tag_key,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         else:
@@ -156,12 +163,15 @@ async def resource_tagging_operations(operation: str, **params) -> str:
         })
 
 @register_tool()
-async def discover_resource_tagging_operations() -> str:
+async def discover_resource_tagging_operations(session_context: Optional[str] = None) -> str:
     """Discover all available resource tagging operations with detailed usage examples.
     
     This tool provides comprehensive documentation of resource tagging operations available
     through the resource_tagging_operations tool, including parameter requirements
     and practical usage examples for AWS resource discovery and inventory management.
+    
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
     
     Returns:
         Detailed catalog of resource tagging operations with examples and parameter descriptions
@@ -175,7 +185,8 @@ async def discover_resource_tagging_operations() -> str:
             "resource_discovery": "Find and inventory AWS resources using tag-based queries",
             "tag_management": "Analyze tag usage patterns across the AWS account",
             "inventory_operations": "Large-scale resource discovery and categorization",
-            "compliance_tracking": "Track resource compliance through standardized tagging"
+            "compliance_tracking": "Track resource compliance through standardized tagging",
+            "cross_account_access": "Support for cross-account resource discovery via session_context"
         },
         "operation_categories": {
             "resource_discovery": {
@@ -187,14 +198,16 @@ async def discover_resource_tagging_operations() -> str:
                         "resource_types": {"type": "list", "description": "List of resource types to filter by (e.g., ['ec2:instance', 's3:bucket'])"},
                         "group_by_type": {"type": "bool", "default": True, "description": "Whether to group resources by service/resource type"},
                         "next_token": {"type": "str", "description": "Token for pagination continuation"},
-                        "max_items": {"type": "int", "description": "Maximum number of items to return"}
+                        "max_items": {"type": "int", "description": "Maximum number of items to return"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access (e.g., '123456789012_aws_dev')"}
                     },
                     "examples": [
                         "resource_tagging_operations(operation='search_resources_by_tag', tag_key='Environment')",
                         "resource_tagging_operations(operation='search_resources_by_tag', tag_key='Environment', tag_value='Production')",
                         "resource_tagging_operations(operation='search_resources_by_tag', tag_key='Team', resource_types=['ec2:instance', 's3:bucket'])",
                         "resource_tagging_operations(operation='search_resources_by_tag', tag_key='Owner', max_items=50)",
-                        "resource_tagging_operations(operation='search_resources_by_tag', tag_key='CostCenter', group_by_type=False)"
+                        "resource_tagging_operations(operation='search_resources_by_tag', tag_key='CostCenter', group_by_type=False)",
+                        "resource_tagging_operations(operation='search_resources_by_tag', tag_key='Environment', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -203,11 +216,13 @@ async def discover_resource_tagging_operations() -> str:
                     "description": "Get all tag keys used across the AWS account",
                     "parameters": {
                         "next_token": {"type": "str", "description": "Token for pagination continuation"},
-                        "max_items": {"type": "int", "description": "Maximum number of tag keys to return"}
+                        "max_items": {"type": "int", "description": "Maximum number of tag keys to return"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access (e.g., '123456789012_aws_dev')"}
                     },
                     "examples": [
                         "resource_tagging_operations(operation='get_all_tag_keys')",
-                        "resource_tagging_operations(operation='get_all_tag_keys', max_items=100)"
+                        "resource_tagging_operations(operation='get_all_tag_keys', max_items=100)",
+                        "resource_tagging_operations(operation='get_all_tag_keys', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -217,11 +232,13 @@ async def discover_resource_tagging_operations() -> str:
                     "parameters": {
                         "tag_key": {"type": "str", "required": True, "description": "The tag key to get values for"},
                         "next_token": {"type": "str", "description": "Token for pagination continuation"},
-                        "max_items": {"type": "int", "description": "Maximum number of tag values to return"}
+                        "max_items": {"type": "int", "description": "Maximum number of tag values to return"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access (e.g., '123456789012_aws_dev')"}
                     },
                     "examples": [
                         "resource_tagging_operations(operation='get_tag_values_for_key', tag_key='Environment')",
-                        "resource_tagging_operations(operation='get_tag_values_for_key', tag_key='Team', max_items=50)"
+                        "resource_tagging_operations(operation='get_tag_values_for_key', tag_key='Team', max_items=50)",
+                        "resource_tagging_operations(operation='get_tag_values_for_key', tag_key='Environment', session_context='123456789012_aws_dev')"
                     ]
                 }
             }
@@ -232,6 +249,11 @@ async def discover_resource_tagging_operations() -> str:
                 "Inventory by team: operation='search_resources_by_tag', tag_key='Team'",
                 "Get all tag keys: operation='get_all_tag_keys'",
                 "Analyze environment values: operation='get_tag_values_for_key', tag_key='Environment'"
+            ],
+            "cross_account_examples": [
+                "Cross-account resource discovery: operation='search_resources_by_tag', tag_key='Environment', session_context='123456789012_aws_dev'",
+                "Cross-account tag analysis: operation='get_all_tag_keys', session_context='123456789012_aws_dev'",
+                "Multi-account compliance: operation='get_tag_values_for_key', tag_key='ComplianceStatus', session_context='123456789012_aws_dev'"
             ],
             "inventory_best_practices": [
                 "Use consistent tag naming conventions across all resources",

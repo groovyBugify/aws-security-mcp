@@ -15,28 +15,30 @@ from aws_security_mcp.services.base import get_client, handle_aws_error, handle_
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def get_ec2_client(**kwargs: Any) -> boto3.client:
+def get_ec2_client(session_context: Optional[str] = None, **kwargs: Any) -> boto3.client:
     """Get AWS EC2 client.
     
     Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the boto3 client constructor
         
     Returns:
         boto3.client: An initialized EC2 client
     """
-    return get_client('ec2', **kwargs)
+    return get_client('ec2', session_context=session_context, **kwargs)
 
-def get_paginator(operation_name: str, **kwargs: Any) -> PageIterator:
+def get_paginator(operation_name: str, session_context: Optional[str] = None, **kwargs: Any) -> PageIterator:
     """Get a paginator for the specified EC2 operation.
     
     Args:
         operation_name: Name of the EC2 operation to paginate
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the paginator
         
     Returns:
         PageIterator: A boto3 paginator for the operation
     """
-    client = get_ec2_client(**kwargs)
+    client = get_ec2_client(session_context=session_context, **kwargs)
     return client.get_paginator(operation_name)
 
 def create_instance_filters(states: Optional[List[str]] = None, 
@@ -88,6 +90,7 @@ def describe_instances(
     instance_ids: Optional[List[str]] = None,
     max_results: Optional[int] = None,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe EC2 instances with filtering options.
@@ -97,12 +100,13 @@ def describe_instances(
         instance_ids: List of instance IDs to describe
         max_results: Maximum number of instances to return per page (None for all, API limits: 5-1000)
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_instances API call
         
     Returns:
         Dict[str, Any]: Response containing instances grouped by reservation
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -129,6 +133,7 @@ def get_all_instances(
     instance_ids: Optional[List[str]] = None,
     max_items: Optional[int] = None, 
     states: Optional[List[str]] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Get all EC2 instances with pagination handling using boto3 paginators.
@@ -138,6 +143,7 @@ def get_all_instances(
         instance_ids: List of instance IDs to describe
         max_items: Maximum number of instances to return (None for all)
         states: Optional list of instance states to filter by (e.g., ['running', 'stopped'])
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_instances API call
         
     Returns:
@@ -160,7 +166,7 @@ def get_all_instances(
     params.update(kwargs)
     
     # Get paginator
-    paginator = get_paginator('describe_instances')
+    paginator = get_paginator('describe_instances', session_context=session_context)
     
     # Configure pagination
     page_config = {}
@@ -254,6 +260,7 @@ def describe_security_groups(
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
     max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe EC2 security groups.
@@ -264,12 +271,13 @@ def describe_security_groups(
         filters: List of filters to apply
         next_token: Token for pagination
         max_results: Maximum number of results to return per page (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_security_groups API call
         
     Returns:
         Dict containing security groups and pagination information
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -306,6 +314,7 @@ def get_all_security_groups(
     group_ids: Optional[List[str]] = None,
     group_names: Optional[List[str]] = None,
     max_items: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Get all security groups with pagination handling using boto3 paginators.
@@ -315,6 +324,7 @@ def get_all_security_groups(
         group_ids: List of security group IDs to describe
         group_names: List of security group names to describe
         max_items: Maximum number of security groups to return (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_security_groups API call
         
     Returns:
@@ -333,7 +343,7 @@ def get_all_security_groups(
     params.update(kwargs)
     
     # Get paginator
-    paginator = get_paginator('describe_security_groups')
+    paginator = get_paginator('describe_security_groups', session_context=session_context)
     
     # Configure pagination
     page_config = {}
@@ -355,6 +365,7 @@ def get_all_security_groups(
 
 def filter_security_groups_by_text(
     search_term: str,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Filter security groups by matching text in name, description, or tags.
@@ -366,13 +377,14 @@ def filter_security_groups_by_text(
                     - protocol:XX - Find security groups allowing specific protocol
                     - public:true - Find security groups open to the internet
                     - cidr:X.X.X.X/X - Find security groups allowing specific CIDR range
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the get_all_security_groups function
         
     Returns:
         List[Dict[str, Any]]: List of matching security groups
     """
     # Get all security groups without any limit
-    security_groups = get_all_security_groups(**kwargs)
+    security_groups = get_all_security_groups(session_context=session_context, **kwargs)
     
     # If empty search term, return all
     if not search_term:
@@ -514,6 +526,7 @@ def describe_vpcs(
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
     max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe VPCs with filtering options.
@@ -523,12 +536,13 @@ def describe_vpcs(
         filters: List of filters to apply
         next_token: Token for pagination
         max_results: Maximum number of results to return (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_vpcs API call
         
     Returns:
         Dict[str, Any]: Response containing VPCs
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -553,6 +567,7 @@ def get_all_vpcs(
     filters: Optional[List[Dict[str, Any]]] = None,
     vpc_ids: Optional[List[str]] = None,
     max_items: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Get all VPCs with pagination handling using boto3 paginators.
@@ -561,6 +576,7 @@ def get_all_vpcs(
         filters: List of filters to apply
         vpc_ids: List of VPC IDs to describe
         max_items: Maximum number of VPCs to return (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_vpcs API call
         
     Returns:
@@ -577,7 +593,7 @@ def get_all_vpcs(
     params.update(kwargs)
     
     # Get paginator
-    paginator = get_paginator('describe_vpcs')
+    paginator = get_paginator('describe_vpcs', session_context=session_context)
     
     # Configure pagination
     page_config = {}
@@ -639,6 +655,7 @@ def describe_route_tables(
     route_table_ids: Optional[List[str]] = None,
     next_token: Optional[str] = None,
     max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe route tables with filtering options.
@@ -648,12 +665,13 @@ def describe_route_tables(
         route_table_ids: List of route table IDs to describe
         next_token: Token for pagination
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_route_tables API call
         
     Returns:
         Dict[str, Any]: Response containing route tables
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -678,6 +696,7 @@ def get_all_route_tables(
     filters: Optional[List[Dict[str, Any]]] = None,
     route_table_ids: Optional[List[str]] = None,
     max_items: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Get all route tables with pagination handling using boto3 paginators.
@@ -686,6 +705,7 @@ def get_all_route_tables(
         filters: List of filters to apply
         route_table_ids: List of route table IDs to describe
         max_items: Maximum number of route tables to return (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_route_tables API call
         
     Returns:
@@ -702,7 +722,7 @@ def get_all_route_tables(
     params.update(kwargs)
     
     # Get paginator
-    paginator = get_paginator('describe_route_tables')
+    paginator = get_paginator('describe_route_tables', session_context=session_context)
     
     # Configure pagination
     page_config = {}
@@ -727,6 +747,7 @@ def describe_images(
     owners: Optional[List[str]] = None,
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe AMIs with filtering options.
@@ -736,12 +757,13 @@ def describe_images(
         owners: List of AMI owners (e.g., 'self', 'amazon')
         filters: List of filters to apply
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_images API call
         
     Returns:
         Dict[str, Any]: Response containing AMIs
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -769,6 +791,7 @@ def describe_volumes(
     volume_ids: Optional[List[str]] = None,
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe EBS volumes with filtering options.
@@ -777,12 +800,13 @@ def describe_volumes(
         volume_ids: List of volume IDs to describe
         filters: List of filters to apply
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_volumes API call
         
     Returns:
         Dict[str, Any]: Response containing volumes
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -807,6 +831,7 @@ def describe_internet_gateways(
     internet_gateway_ids: Optional[List[str]] = None,
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe internet gateways with filtering options.
@@ -815,12 +840,13 @@ def describe_internet_gateways(
         internet_gateway_ids: List of internet gateway IDs to describe
         filters: List of filters to apply
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_internet_gateways API call
         
     Returns:
         Dict[str, Any]: Response containing internet gateways
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -846,6 +872,7 @@ def describe_subnets(
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
     max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe subnets with filtering options.
@@ -855,12 +882,13 @@ def describe_subnets(
         filters: List of filters to apply
         next_token: Token for pagination
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_subnets API call
         
     Returns:
         Dict[str, Any]: Response containing subnets
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -885,6 +913,7 @@ def get_all_subnets(
     filters: Optional[List[Dict[str, Any]]] = None,
     subnet_ids: Optional[List[str]] = None,
     max_items: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Get all subnets with pagination handling using boto3 paginators.
@@ -893,6 +922,7 @@ def get_all_subnets(
         filters: List of filters to apply
         subnet_ids: List of subnet IDs to describe
         max_items: Maximum number of subnets to return (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_subnets API call
         
     Returns:
@@ -909,7 +939,7 @@ def get_all_subnets(
     params.update(kwargs)
     
     # Get paginator
-    paginator = get_paginator('describe_subnets')
+    paginator = get_paginator('describe_subnets', session_context=session_context)
     
     # Configure pagination
     page_config = {}
@@ -976,6 +1006,7 @@ def describe_network_acls(
     filters: Optional[List[Dict[str, Any]]] = None,
     next_token: Optional[str] = None,
     max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Describe network ACLs with filtering options.
@@ -985,12 +1016,13 @@ def describe_network_acls(
         filters: List of filters to apply
         next_token: Token for pagination
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_network_acls API call
         
     Returns:
         Dict[str, Any]: Response containing network ACLs
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs
@@ -1015,6 +1047,7 @@ def describe_addresses(
     allocation_ids: Optional[List[str]] = None,
     public_ips: Optional[List[str]] = None,
     filters: Optional[List[Dict[str, Any]]] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Describe Elastic IP addresses with filtering options.
@@ -1023,12 +1056,13 @@ def describe_addresses(
         allocation_ids: List of allocation IDs to describe
         public_ips: List of public IP addresses to describe
         filters: List of filters to apply
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the describe_addresses API call
         
     Returns:
         List[Dict[str, Any]]: List of Elastic IP address information
     """
-    client = get_ec2_client()
+    client = get_ec2_client(session_context=session_context)
     
     params = {
         **kwargs

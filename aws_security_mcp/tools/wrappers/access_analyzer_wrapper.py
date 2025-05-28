@@ -35,7 +35,7 @@ def safe_json_dumps(data: Any, **kwargs) -> str:
     return json.dumps(data, cls=DateTimeEncoder, **kwargs)
 
 @register_tool()
-async def access_analyzer_security_operations(operation: str, **params) -> str:
+async def access_analyzer_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Access Analyzer Security Operations Hub - Comprehensive external access analysis and security monitoring.
     
     🔍 ANALYZER MANAGEMENT:
@@ -76,8 +76,12 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
     🔎 List Lambda function findings:
     operation="list_findings_by_category", analyzerArn="MyAnalyzer", resource_type="AWS::Lambda::Function", limit=25
     
+    🌐 Cross-account operations:
+    operation="list_analyzers", session_context="123456789012_aws_dev"
+    
     Args:
         operation: The Access Analyzer operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
         # Analyzer identification parameters:
         analyzer_name: Name of the Access Analyzer (required for get_analyzer)
@@ -96,9 +100,16 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
         
     Returns:
         JSON formatted response with operation results and Access Analyzer security insights
+        
+    Examples:
+        # Single account (default)
+        access_analyzer_security_operations(operation="list_analyzers")
+        
+        # Cross-account access
+        access_analyzer_security_operations(operation="list_analyzers", session_context="123456789012_aws_dev")
     """
     
-    logger.info(f"Access Analyzer operation requested: {operation}")
+    logger.info(f"Access Analyzer operation requested: {operation} (session_context={session_context})")
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -106,7 +117,7 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
     
     try:
         if operation == "list_analyzers":
-            result = await _list_analyzers()
+            result = await _list_analyzers(session_context=session_context)
             
             # Parse the JSON string result and return as safe JSON
             return safe_json_dumps(json.loads(result))
@@ -119,7 +130,7 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_analyzer', analyzer_name='MyAnalyzer'"
                 })
             
-            result = await _get_analyzer(analyzer_name=analyzer_name)
+            result = await _get_analyzer(analyzer_name=analyzer_name, session_context=session_context)
             
             # Parse the JSON string result and return as safe JSON
             return safe_json_dumps(json.loads(result))
@@ -140,7 +151,8 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
                 analyzerArn=analyzerArn,
                 status=status,
                 next_token=next_token,
-                limit=limit
+                limit=limit,
+                session_context=session_context
             )
             
             # Parse the JSON string result and return as safe JSON
@@ -164,7 +176,8 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
             
             result = await _get_finding(
                 analyzerArn=analyzerArn,
-                finding_id=finding_id
+                finding_id=finding_id,
+                session_context=session_context
             )
             
             # Parse the JSON string result and return as safe JSON
@@ -201,7 +214,8 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
                 resource_type=resource_type,
                 status=status,
                 next_token=next_token,
-                limit=limit
+                limit=limit,
+                session_context=session_context
             )
             
             # Parse the JSON string result and return as safe JSON
@@ -222,7 +236,8 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
                     "get_analyzer": "operation='get_analyzer', analyzer_name='MyAnalyzer'",
                     "list_findings": "operation='list_findings', analyzerArn='MyAnalyzer'",
                     "get_finding": "operation='get_finding', analyzerArn='MyAnalyzer', finding_id='12345678-1234-1234-1234-123456789012'",
-                    "list_findings_by_category": "operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::S3::Bucket'"
+                    "list_findings_by_category": "operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::S3::Bucket'",
+                    "cross_account": "operation='list_analyzers', session_context='123456789012_aws_dev'"
                 }
             })
             
@@ -233,26 +248,46 @@ async def access_analyzer_security_operations(operation: str, **params) -> str:
                 "message": f"Error executing Access Analyzer operation '{operation}': {str(e)}",
                 "type": type(e).__name__,
                 "operation": operation,
-                "parameters": params
+                "parameters": params,
+                "session_context": session_context
             }
         })
 
 @register_tool()
-async def discover_access_analyzer_operations() -> str:
+async def discover_access_analyzer_operations(session_context: Optional[str] = None) -> str:
     """Discover all available Access Analyzer operations with detailed usage examples.
     
     This tool provides comprehensive documentation of Access Analyzer operations available
     through the access_analyzer_security_operations tool, including parameter requirements
     and practical usage examples for external access analysis and security monitoring.
     
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+    
     Returns:
         Detailed catalog of Access Analyzer operations with examples and parameter descriptions
+        
+    Examples:
+        # Single account (default)
+        discover_access_analyzer_operations()
+        
+        # Cross-account access
+        discover_access_analyzer_operations(session_context="123456789012_aws_dev")
     """
     
     operations_catalog = {
         "service": "AWS IAM Access Analyzer",
         "description": "External access analysis and security monitoring for AWS resources",
         "wrapper_tool": "access_analyzer_security_operations",
+        "session_context_support": True,
+        "cross_account_access": {
+            "description": "All operations support cross-account access via session_context parameter",
+            "usage": "session_context='123456789012_aws_dev'",
+            "examples": [
+                "access_analyzer_security_operations(operation='list_analyzers', session_context='123456789012_aws_dev')",
+                "access_analyzer_security_operations(operation='list_findings', analyzerArn='MyAnalyzer', session_context='123456789012_aws_dev')"
+            ]
+        },
         "supported_features": {
             "analyzer_management": "Manage and configure Access Analyzers for security monitoring",
             "findings_analysis": "Analyze and investigate external access findings",
@@ -265,19 +300,23 @@ async def discover_access_analyzer_operations() -> str:
             "analyzer_management": {
                 "list_analyzers": {
                     "description": "List all IAM Access Analyzers in the account",
-                    "parameters": {},
+                    "parameters": {
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
+                    },
                     "examples": [
-                        "access_analyzer_security_operations(operation='list_analyzers')"
+                        "access_analyzer_security_operations(operation='list_analyzers')",
+                        "access_analyzer_security_operations(operation='list_analyzers', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "get_analyzer": {
                     "description": "Get detailed information about a specific Access Analyzer",
                     "parameters": {
-                        "analyzer_name": {"type": "str", "required": True, "description": "Name of the Access Analyzer"}
+                        "analyzer_name": {"type": "str", "required": True, "description": "Name of the Access Analyzer"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "access_analyzer_security_operations(operation='get_analyzer', analyzer_name='MyAnalyzer')",
-                        "access_analyzer_security_operations(operation='get_analyzer', analyzer_name='OrganizationAnalyzer')"
+                        "access_analyzer_security_operations(operation='get_analyzer', analyzer_name='OrganizationAnalyzer', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -288,12 +327,13 @@ async def discover_access_analyzer_operations() -> str:
                         "analyzerArn": {"type": "str", "required": True, "description": "ARN or name of the Access Analyzer"},
                         "status": {"type": "str", "description": "Finding status filter (ACTIVE, ARCHIVED, RESOLVED)"},
                         "next_token": {"type": "str", "description": "Pagination token for fetching the next set of results"},
-                        "limit": {"type": "int", "default": 100, "description": "Maximum number of findings to return"}
+                        "limit": {"type": "int", "default": 100, "description": "Maximum number of findings to return"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "access_analyzer_security_operations(operation='list_findings', analyzerArn='MyAnalyzer')",
                         "access_analyzer_security_operations(operation='list_findings', analyzerArn='arn:aws:access-analyzer:us-east-1:123456789012:analyzer/MyAnalyzer', status='ACTIVE')",
-                        "access_analyzer_security_operations(operation='list_findings', analyzerArn='MyAnalyzer', status='ACTIVE', limit=50)",
+                        "access_analyzer_security_operations(operation='list_findings', analyzerArn='MyAnalyzer', status='ACTIVE', limit=50, session_context='123456789012_aws_dev')",
                         "access_analyzer_security_operations(operation='list_findings', analyzerArn='MyAnalyzer', next_token='pagination_token')"
                     ]
                 },
@@ -301,11 +341,12 @@ async def discover_access_analyzer_operations() -> str:
                     "description": "Get detailed information about a specific Access Analyzer finding",
                     "parameters": {
                         "analyzerArn": {"type": "str", "required": True, "description": "ARN or name of the Access Analyzer"},
-                        "finding_id": {"type": "str", "required": True, "description": "ID of the specific finding"}
+                        "finding_id": {"type": "str", "required": True, "description": "ID of the specific finding"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "access_analyzer_security_operations(operation='get_finding', analyzerArn='MyAnalyzer', finding_id='12345678-1234-1234-1234-123456789012')",
-                        "access_analyzer_security_operations(operation='get_finding', analyzerArn='arn:aws:access-analyzer:us-east-1:123456789012:analyzer/MyAnalyzer', finding_id='abcdef12-3456-7890-abcd-ef1234567890')"
+                        "access_analyzer_security_operations(operation='get_finding', analyzerArn='arn:aws:access-analyzer:us-east-1:123456789012:analyzer/MyAnalyzer', finding_id='abcdef12-3456-7890-abcd-ef1234567890', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "list_findings_by_category": {
@@ -315,11 +356,12 @@ async def discover_access_analyzer_operations() -> str:
                         "resource_type": {"type": "str", "required": True, "description": "Resource type to filter by"},
                         "status": {"type": "str", "default": "ACTIVE", "description": "Finding status filter (ACTIVE, ARCHIVED, RESOLVED)"},
                         "next_token": {"type": "str", "description": "Pagination token for fetching the next set of results"},
-                        "limit": {"type": "int", "default": 100, "description": "Maximum number of findings to return"}
+                        "limit": {"type": "int", "default": 100, "description": "Maximum number of findings to return"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "access_analyzer_security_operations(operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::S3::Bucket')",
-                        "access_analyzer_security_operations(operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::IAM::Role', status='ACTIVE')",
+                        "access_analyzer_security_operations(operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::IAM::Role', status='ACTIVE', session_context='123456789012_aws_dev')",
                         "access_analyzer_security_operations(operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::Lambda::Function', limit=25)",
                         "access_analyzer_security_operations(operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::SQS::Queue', status='ARCHIVED')"
                     ]
@@ -351,6 +393,11 @@ async def discover_access_analyzer_operations() -> str:
                 "Get analyzer details: operation='get_analyzer', analyzer_name='MyAnalyzer'",
                 "List active findings: operation='list_findings', analyzerArn='MyAnalyzer', status='ACTIVE'",
                 "Get S3 bucket findings: operation='list_findings_by_category', analyzerArn='MyAnalyzer', resource_type='AWS::S3::Bucket'"
+            ],
+            "cross_account_examples": [
+                "List analyzers in dev account: operation='list_analyzers', session_context='123456789012_aws_dev'",
+                "Get analyzer details in prod account: operation='get_analyzer', analyzer_name='MyAnalyzer', session_context='987654321098_aws_prod'",
+                "List findings in staging account: operation='list_findings', analyzerArn='MyAnalyzer', session_context='456789012345_aws_staging'"
             ],
             "security_monitoring_patterns": [
                 "Monitor for unintended external access to S3 buckets",

@@ -30,21 +30,29 @@ def parse_cloudfront_domain(domain_name: str) -> Optional[str]:
 
 
 @register_tool()
-async def list_distributions(limit: int = 1000, next_token: Optional[str] = None) -> str:
+async def list_distributions(limit: int = 1000, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List CloudFront distributions in the AWS account.
     
     Args:
         limit: Maximum number of distributions to return (default: 1000)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with CloudFront distributions
+        
+    Examples:
+        # Single account (default)
+        list_distributions()
+        
+        # Cross-account access
+        list_distributions(session_context="123456789012_aws_dev")
     """
-    logger.info(f"Listing CloudFront distributions (limit={limit}, next_token={next_token})")
+    logger.info(f"Listing CloudFront distributions (limit={limit}, next_token={next_token}, session_context={session_context})")
     
     try:
         # Pass limit directly - the service will handle the type conversion internally 
-        response = cloudfront.list_distributions(max_items=limit, next_token=next_token)
+        response = cloudfront.list_distributions(max_items=limit, next_token=next_token, session_context=session_context)
         distributions = response.get("distributions", [])
         next_token = response.get("next_token")
         is_truncated = response.get("is_truncated", False)
@@ -122,14 +130,22 @@ async def list_distributions(limit: int = 1000, next_token: Optional[str] = None
 
 
 @register_tool()
-async def get_distribution_details(distribution_id: str) -> str:
+async def get_distribution_details(distribution_id: str, session_context: Optional[str] = None) -> str:
     """Get detailed information about a specific CloudFront distribution.
     
     Args:
         distribution_id: ID of the CloudFront distribution or domain name
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with distribution details
+        
+    Examples:
+        # Single account (default)
+        get_distribution_details("E1A2B3C4D5E6F7")
+        
+        # Cross-account access
+        get_distribution_details("E1A2B3C4D5E6F7", session_context="123456789012_aws_dev")
     """
     logger.info(f"Getting details for CloudFront distribution: {distribution_id}")
     
@@ -144,7 +160,7 @@ async def get_distribution_details(distribution_id: str) -> str:
                 logger.info(f"Parsed CloudFront domain {distribution_id} to distribution ID: {parsed_id}")
                 actual_distribution_id = parsed_id
         
-        distribution = cloudfront.get_distribution(actual_distribution_id)
+        distribution = cloudfront.get_distribution(actual_distribution_id, session_context=session_context)
         
         if not distribution:
             error_msg = f"CloudFront distribution '{distribution_id}' not found"
@@ -259,7 +275,7 @@ async def get_distribution_details(distribution_id: str) -> str:
             result["aliases"] = aliases
         
         # Tags
-        tags = cloudfront.get_distribution_tags(actual_distribution_id)
+        tags = cloudfront.get_distribution_tags(actual_distribution_id, session_context=session_context)
         if tags:
             result["tags"] = tags
         
@@ -275,21 +291,29 @@ async def get_distribution_details(distribution_id: str) -> str:
 
 
 @register_tool()
-async def list_cache_policies(limit: int = 100, next_token: Optional[str] = None) -> str:
+async def list_cache_policies(limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List CloudFront cache policies.
     
     Args:
         limit: Maximum number of policies to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with cache policies
+        
+    Examples:
+        # Single account (default)
+        list_cache_policies()
+        
+        # Cross-account access
+        list_cache_policies(session_context="123456789012_aws_dev")
     """
-    logger.info(f"Listing CloudFront cache policies (limit={limit}, next_token={next_token})")
+    logger.info(f"Listing CloudFront cache policies (limit={limit}, next_token={next_token}, session_context={session_context})")
     
     try:
         # Ensure max_items is passed as a string as expected by the service module
-        response = cloudfront.list_cache_policies(max_items=str(limit), next_token=next_token)
+        response = cloudfront.list_cache_policies(max_items=str(limit), next_token=next_token, session_context=session_context)
         policies = response.get("policies", [])
         next_token = response.get("next_token")
         is_truncated = response.get("is_truncated", False)
@@ -349,21 +373,29 @@ async def list_cache_policies(limit: int = 100, next_token: Optional[str] = None
 
 
 @register_tool()
-async def list_origin_request_policies(limit: int = 100, next_token: Optional[str] = None) -> str:
+async def list_origin_request_policies(limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List CloudFront origin request policies.
     
     Args:
         limit: Maximum number of policies to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with origin request policies
+        
+    Examples:
+        # Single account (default)
+        list_origin_request_policies()
+        
+        # Cross-account access
+        list_origin_request_policies(session_context="123456789012_aws_dev")
     """
-    logger.info(f"Listing CloudFront origin request policies (limit={limit}, next_token={next_token})")
+    logger.info(f"Listing CloudFront origin request policies (limit={limit}, next_token={next_token}, session_context={session_context})")
     
     try:
         # Ensure max_items is passed as a string as expected by the service module
-        response = cloudfront.list_origin_request_policies(max_items=str(limit), next_token=next_token)
+        response = cloudfront.list_origin_request_policies(max_items=str(limit), next_token=next_token, session_context=session_context)
         policies = response.get("policies", [])
         next_token = response.get("next_token")
         is_truncated = response.get("is_truncated", False)
@@ -423,21 +455,29 @@ async def list_origin_request_policies(limit: int = 100, next_token: Optional[st
 
 
 @register_tool()
-async def list_response_headers_policies(limit: int = 100, next_token: Optional[str] = None) -> str:
+async def list_response_headers_policies(limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List CloudFront response headers policies.
     
     Args:
         limit: Maximum number of policies to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with response headers policies
+        
+    Examples:
+        # Single account (default)
+        list_response_headers_policies()
+        
+        # Cross-account access
+        list_response_headers_policies(session_context="123456789012_aws_dev")
     """
-    logger.info(f"Listing CloudFront response headers policies (limit={limit}, next_token={next_token})")
+    logger.info(f"Listing CloudFront response headers policies (limit={limit}, next_token={next_token}, session_context={session_context})")
     
     try:
         # Ensure max_items is passed as a string as expected by the service module
-        response = cloudfront.list_response_headers_policies(max_items=str(limit), next_token=next_token)
+        response = cloudfront.list_response_headers_policies(max_items=str(limit), next_token=next_token, session_context=session_context)
         policies = response.get("policies", [])
         next_token = response.get("next_token")
         is_truncated = response.get("is_truncated", False)
@@ -497,22 +537,30 @@ async def list_response_headers_policies(limit: int = 100, next_token: Optional[
 
 
 @register_tool()
-async def get_distribution_invalidations(distribution_id: str, limit: int = 100, next_token: Optional[str] = None) -> str:
+async def get_distribution_invalidations(distribution_id: str, limit: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """Get invalidations for a specific CloudFront distribution.
     
     Args:
         distribution_id: ID of the CloudFront distribution
         limit: Maximum number of invalidations to return (default: 100)
         next_token: Token for pagination (from previous request)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with invalidation details
+        
+    Examples:
+        # Single account (default)
+        get_distribution_invalidations("E1A2B3C4D5E6F7")
+        
+        # Cross-account access
+        get_distribution_invalidations("E1A2B3C4D5E6F7", session_context="123456789012_aws_dev")
     """
-    logger.info(f"Getting invalidations for CloudFront distribution: {distribution_id} (limit={limit}, next_token={next_token})")
+    logger.info(f"Getting invalidations for CloudFront distribution: {distribution_id} (limit={limit}, next_token={next_token}, session_context={session_context})")
     
     try:
         # Ensure max_items is passed as a string as expected by the service module
-        response = cloudfront.list_invalidations(distribution_id=distribution_id, max_items=str(limit), next_token=next_token)
+        response = cloudfront.list_invalidations(distribution_id=distribution_id, max_items=str(limit), next_token=next_token, session_context=session_context)
         invalidations = response.get("invalidations", [])
         next_token = response.get("next_token")
         is_truncated = response.get("is_truncated", False)
@@ -570,7 +618,7 @@ async def get_distribution_invalidations(distribution_id: str, limit: int = 100,
 
 
 @register_tool()
-async def search_distribution(identifier: str) -> str:
+async def search_distribution(identifier: str, session_context: Optional[str] = None) -> str:
     """Search for a CloudFront distribution by domain name, distribution ID, or alias.
     
     This tool searches for CloudFront distributions using the provided identifier,
@@ -579,9 +627,17 @@ async def search_distribution(identifier: str) -> str:
     
     Args:
         identifier: CloudFront domain name, distribution ID, or alias
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with distribution details if found
+        
+    Examples:
+        # Single account (default)
+        search_distribution("example.com")
+        
+        # Cross-account access
+        search_distribution("example.com", session_context="123456789012_aws_dev")
     """
     logger.info(f"Searching for CloudFront distribution with identifier: {identifier}")
     
@@ -594,7 +650,7 @@ async def search_distribution(identifier: str) -> str:
                 logger.info(f"Parsed CloudFront domain {identifier} to distribution ID: {distribution_id}")
         
         # Search for the distribution
-        distribution = cloudfront.search_distribution(identifier)
+        distribution = cloudfront.search_distribution(identifier, session_context=session_context)
         
         if not distribution:
             return json.dumps({
@@ -668,7 +724,7 @@ async def search_distribution(identifier: str) -> str:
             result["aliases"] = aliases
         
         # Tags
-        tags = cloudfront.get_distribution_tags(distribution.get('Id', ''))
+        tags = cloudfront.get_distribution_tags(distribution.get('Id', ''), session_context=session_context)
         if tags:
             result["tags"] = tags
         

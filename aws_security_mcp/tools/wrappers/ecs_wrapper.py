@@ -25,7 +25,7 @@ from aws_security_mcp.tools.ecs_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def ecs_security_operations(operation: str, **params) -> str:
+async def ecs_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """ECS Security Operations Hub - Comprehensive container orchestration security monitoring.
     
     🏗️ CLUSTER MANAGEMENT:
@@ -80,6 +80,7 @@ async def ecs_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The ECS operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
         # Cluster parameters:
         cluster: ECS cluster name or ARN (required for cluster-specific operations)
@@ -99,7 +100,7 @@ async def ecs_security_operations(operation: str, **params) -> str:
         JSON formatted response with operation results and ECS security insights
     """
     
-    logger.info(f"ECS operation requested: {operation}")
+    logger.info(f"ECS operation requested: {operation} (session_context={session_context})")
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -107,7 +108,7 @@ async def ecs_security_operations(operation: str, **params) -> str:
     
     try:
         if operation == "list_clusters":
-            return json.dumps(await _list_ecs_clusters())
+            return json.dumps(await _list_ecs_clusters(session_context=session_context))
             
         elif operation == "list_task_definitions":
             family_prefix = params.get("family_prefix")
@@ -115,7 +116,8 @@ async def ecs_security_operations(operation: str, **params) -> str:
             
             return json.dumps(await _list_ecs_task_definitions(
                 family_prefix=family_prefix,
-                status=status
+                status=status,
+                session_context=session_context
             ))
             
         elif operation == "get_task_definition":
@@ -129,7 +131,8 @@ async def ecs_security_operations(operation: str, **params) -> str:
             cluster = params.get("cluster")
             return json.dumps(await _get_ecs_task_definition(
                 task_definition=task_definition,
-                cluster=cluster
+                cluster=cluster,
+                session_context=session_context
             ))
             
         elif operation == "list_services":
@@ -140,7 +143,7 @@ async def ecs_security_operations(operation: str, **params) -> str:
                     "usage": "operation='list_services', cluster='my-cluster'"
                 })
             
-            return json.dumps(await _list_ecs_services(cluster=cluster))
+            return json.dumps(await _list_ecs_services(cluster=cluster, session_context=session_context))
             
         elif operation == "get_service":
             cluster = params.get("cluster")
@@ -153,7 +156,8 @@ async def ecs_security_operations(operation: str, **params) -> str:
             
             return json.dumps(await _get_ecs_service(
                 cluster=cluster,
-                service=service
+                service=service,
+                session_context=session_context
             ))
             
         elif operation == "list_tasks":
@@ -167,7 +171,8 @@ async def ecs_security_operations(operation: str, **params) -> str:
             service = params.get("service")
             return json.dumps(await _list_ecs_tasks(
                 cluster=cluster,
-                service=service
+                service=service,
+                session_context=session_context
             ))
             
         elif operation == "get_task":
@@ -181,7 +186,8 @@ async def ecs_security_operations(operation: str, **params) -> str:
             
             return json.dumps(await _get_ecs_task(
                 cluster=cluster,
-                task=task
+                task=task,
+                session_context=session_context
             ))
             
         elif operation == "list_container_instances":
@@ -192,7 +198,7 @@ async def ecs_security_operations(operation: str, **params) -> str:
                     "usage": "operation='list_container_instances', cluster='my-cluster'"
                 })
             
-            return json.dumps(await _list_ecs_container_instances(cluster=cluster))
+            return json.dumps(await _list_ecs_container_instances(cluster=cluster, session_context=session_context))
             
         else:
             # Provide helpful error with available operations
@@ -250,9 +256,12 @@ async def discover_ecs_operations() -> str:
             "cluster_management": {
                 "list_clusters": {
                     "description": "List all ECS clusters with security configuration details",
-                    "parameters": {},
+                    "parameters": {
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
+                    },
                     "examples": [
-                        "ecs_security_operations(operation='list_clusters')"
+                        "ecs_security_operations(operation='list_clusters')",
+                        "ecs_security_operations(operation='list_clusters', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -261,24 +270,28 @@ async def discover_ecs_operations() -> str:
                     "description": "List task definitions with security configurations",
                     "parameters": {
                         "family_prefix": {"type": "str", "description": "Optional family name prefix to filter task definitions"},
-                        "status": {"type": "str", "default": "ACTIVE", "description": "Task definition status (ACTIVE or INACTIVE)"}
+                        "status": {"type": "str", "default": "ACTIVE", "description": "Task definition status (ACTIVE or INACTIVE)"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='list_task_definitions')",
                         "ecs_security_operations(operation='list_task_definitions', family_prefix='web-app')",
-                        "ecs_security_operations(operation='list_task_definitions', status='INACTIVE')"
+                        "ecs_security_operations(operation='list_task_definitions', status='INACTIVE')",
+                        "ecs_security_operations(operation='list_task_definitions', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "get_task_definition": {
                     "description": "Get detailed task definition with security analysis",
                     "parameters": {
                         "task_definition": {"type": "str", "required": True, "description": "Task definition family name, ARN, or family:revision"},
-                        "cluster": {"type": "str", "description": "Optional cluster name to check for running tasks"}
+                        "cluster": {"type": "str", "description": "Optional cluster name to check for running tasks"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='get_task_definition', task_definition='my-app')",
                         "ecs_security_operations(operation='get_task_definition', task_definition='my-app:1')",
-                        "ecs_security_operations(operation='get_task_definition', task_definition='my-app', cluster='production')"
+                        "ecs_security_operations(operation='get_task_definition', task_definition='my-app', cluster='production')",
+                        "ecs_security_operations(operation='get_task_definition', task_definition='my-app', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -286,22 +299,26 @@ async def discover_ecs_operations() -> str:
                 "list_services": {
                     "description": "List ECS services for a specific cluster with security details",
                     "parameters": {
-                        "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"}
+                        "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='list_services', cluster='my-cluster')",
-                        "ecs_security_operations(operation='list_services', cluster='arn:aws:ecs:region:account:cluster/my-cluster')"
+                        "ecs_security_operations(operation='list_services', cluster='arn:aws:ecs:region:account:cluster/my-cluster')",
+                        "ecs_security_operations(operation='list_services', cluster='my-cluster', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "get_service": {
                     "description": "Get detailed service information with security configuration",
                     "parameters": {
                         "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"},
-                        "service": {"type": "str", "required": True, "description": "ECS service name or ARN"}
+                        "service": {"type": "str", "required": True, "description": "ECS service name or ARN"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='get_service', cluster='my-cluster', service='my-service')",
-                        "ecs_security_operations(operation='get_service', cluster='production', service='web-app')"
+                        "ecs_security_operations(operation='get_service', cluster='production', service='web-app')",
+                        "ecs_security_operations(operation='get_service', cluster='my-cluster', service='my-service', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -310,22 +327,26 @@ async def discover_ecs_operations() -> str:
                     "description": "List ECS tasks for cluster or service with security details",
                     "parameters": {
                         "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"},
-                        "service": {"type": "str", "description": "Optional service name to filter tasks"}
+                        "service": {"type": "str", "description": "Optional service name to filter tasks"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='list_tasks', cluster='my-cluster')",
-                        "ecs_security_operations(operation='list_tasks', cluster='my-cluster', service='my-service')"
+                        "ecs_security_operations(operation='list_tasks', cluster='my-cluster', service='my-service')",
+                        "ecs_security_operations(operation='list_tasks', cluster='my-cluster', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "get_task": {
                     "description": "Get detailed task information with network and security configuration",
                     "parameters": {
                         "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"},
-                        "task": {"type": "str", "required": True, "description": "ECS task ARN or ID"}
+                        "task": {"type": "str", "required": True, "description": "ECS task ARN or ID"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='get_task', cluster='my-cluster', task='arn:aws:ecs:region:account:task/task-id')",
-                        "ecs_security_operations(operation='get_task', cluster='production', task='1234567890abcdef')"
+                        "ecs_security_operations(operation='get_task', cluster='production', task='1234567890abcdef')",
+                        "ecs_security_operations(operation='get_task', cluster='my-cluster', task='task-id', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
@@ -333,11 +354,13 @@ async def discover_ecs_operations() -> str:
                 "list_container_instances": {
                     "description": "List container instances with security details",
                     "parameters": {
-                        "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"}
+                        "cluster": {"type": "str", "required": True, "description": "ECS cluster name or ARN"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
                     },
                     "examples": [
                         "ecs_security_operations(operation='list_container_instances', cluster='my-cluster')",
-                        "ecs_security_operations(operation='list_container_instances', cluster='production')"
+                        "ecs_security_operations(operation='list_container_instances', cluster='production')",
+                        "ecs_security_operations(operation='list_container_instances', cluster='my-cluster', session_context='123456789012_aws_dev')"
                     ]
                 }
             }

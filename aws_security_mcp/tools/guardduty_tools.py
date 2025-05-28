@@ -21,20 +21,21 @@ logger = logging.getLogger(__name__)
 
 
 @register_tool()
-async def list_detectors(max_results: int = 100) -> str:
+async def list_detectors(max_results: int = 100, session_context: Optional[str] = None) -> str:
     """List all GuardDuty detectors in the account.
     
     Args:
         max_results: Maximum number of detectors to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with GuardDuty detectors
     """
-    logger.info("Listing GuardDuty detectors")
+    logger.info(f"Listing GuardDuty detectors (session_context={session_context})")
     
     try:
         logger.info("Calling guardduty.list_detectors")
-        detectors = guardduty.list_detectors(max_results=max_results)
+        detectors = guardduty.list_detectors(max_results=max_results, session_context=session_context)
         logger.info(f"Received detectors: {detectors}")
         
         if not detectors:
@@ -60,7 +61,7 @@ async def list_detectors(max_results: int = 100) -> str:
             try:
                 # Get detector details
                 logger.info(f"Calling guardduty.get_detector with ID: {detector_id}")
-                details = guardduty.get_detector(detector_id)
+                details = guardduty.get_detector(detector_id, session_context=session_context)
                 logger.info(f"Received detector details: {details}")
                 
                 if details:
@@ -139,7 +140,8 @@ async def list_findings(
     max_results: int = 50, 
     finding_ids: Optional[List[str]] = None,
     severity: Optional[str] = None,
-    search_term: Optional[str] = None
+    search_term: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> str:
     """List GuardDuty findings for a specific detector.
     
@@ -149,19 +151,20 @@ async def list_findings(
         finding_ids: Optional list of specific finding IDs to retrieve
         severity: Optional severity filter (LOW, MEDIUM, HIGH, ALL)
         search_term: Optional text search term
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with GuardDuty findings
     """
-    logger.info(f"Listing GuardDuty findings for detector {detector_id}")
+    logger.info(f"Listing GuardDuty findings for detector {detector_id} (session_context={session_context})")
     
     try:
         # Fetch findings
         if finding_ids:
-            findings = guardduty.get_findings(detector_id, finding_ids, max_results=max_results)
+            findings = guardduty.get_findings(detector_id, finding_ids, max_results=max_results, session_context=session_context)
         else:
-            finding_ids = guardduty.list_findings(detector_id, max_results=max_results)
-            findings = guardduty.get_findings(detector_id, finding_ids, max_results=max_results)
+            finding_ids = guardduty.list_findings(detector_id, max_results=max_results, session_context=session_context)
+            findings = guardduty.get_findings(detector_id, finding_ids, max_results=max_results, session_context=session_context)
         
         if not findings:
             return json.dumps({
@@ -208,20 +211,21 @@ async def list_findings(
 
 
 @register_tool()
-async def get_finding_details(detector_id: str, finding_id: str) -> str:
+async def get_finding_details(detector_id: str, finding_id: str, session_context: Optional[str] = None) -> str:
     """Get detailed information about a specific GuardDuty finding.
     
     Args:
         detector_id: GuardDuty detector ID
         finding_id: ID of the finding to retrieve
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with detailed finding information
     """
-    logger.info(f"Getting GuardDuty finding details for detector {detector_id}, finding {finding_id}")
+    logger.info(f"Getting GuardDuty finding details for detector {detector_id}, finding {finding_id} (session_context={session_context})")
     
     try:
-        findings = guardduty.get_findings(detector_id, [finding_id])
+        findings = guardduty.get_findings(detector_id, [finding_id], session_context=session_context)
         
         if not findings:
             return json.dumps({
@@ -250,20 +254,21 @@ async def get_finding_details(detector_id: str, finding_id: str) -> str:
 
 
 @register_tool()
-async def list_ip_sets(detector_id: str, max_results: int = 50) -> str:
+async def list_ip_sets(detector_id: str, max_results: int = 50, session_context: Optional[str] = None) -> str:
     """List IP sets for a GuardDuty detector.
     
     Args:
         detector_id: GuardDuty detector ID
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with GuardDuty IP sets
     """
-    logger.info(f"Listing GuardDuty IP sets for detector {detector_id}")
+    logger.info(f"Listing GuardDuty IP sets for detector {detector_id} (session_context={session_context})")
     
     try:
-        ip_sets_ids = guardduty.list_ip_sets(detector_id, max_results=max_results)
+        ip_sets_ids = guardduty.list_ip_sets(detector_id, max_results=max_results, session_context=session_context)
         
         if not ip_sets_ids:
             return json.dumps({
@@ -274,7 +279,7 @@ async def list_ip_sets(detector_id: str, max_results: int = 50) -> str:
             })
         
         # Get details for each IP set
-        client = guardduty.get_guardduty_client()
+        client = guardduty.get_guardduty_client(session_context=session_context)
         formatted_ip_sets = []
         
         for ip_set in ip_sets_ids:
@@ -319,20 +324,21 @@ async def list_ip_sets(detector_id: str, max_results: int = 50) -> str:
 
 
 @register_tool()
-async def list_threat_intel_sets(detector_id: str, max_results: int = 50) -> str:
+async def list_threat_intel_sets(detector_id: str, max_results: int = 50, session_context: Optional[str] = None) -> str:
     """List threat intelligence sets for a GuardDuty detector.
     
     Args:
         detector_id: GuardDuty detector ID
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with GuardDuty threat intel sets
     """
-    logger.info(f"Listing GuardDuty threat intel sets for detector {detector_id}")
+    logger.info(f"Listing GuardDuty threat intel sets for detector {detector_id} (session_context={session_context})")
     
     try:
-        threat_intel_set_ids = guardduty.list_threat_intel_sets(detector_id, max_results=max_results)
+        threat_intel_set_ids = guardduty.list_threat_intel_sets(detector_id, max_results=max_results, session_context=session_context)
         
         if not threat_intel_set_ids:
             return json.dumps({
@@ -343,7 +349,7 @@ async def list_threat_intel_sets(detector_id: str, max_results: int = 50) -> str
             })
         
         # Get details for each threat intel set
-        client = guardduty.get_guardduty_client()
+        client = guardduty.get_guardduty_client(session_context=session_context)
         formatted_threat_intel_sets = []
         
         for threat_intel_set in threat_intel_set_ids:

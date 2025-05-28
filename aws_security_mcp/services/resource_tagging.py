@@ -35,24 +35,30 @@ class ResourceTaggingService:
         self.profile = profile
         self._client = None
     
-    @property
-    def client(self):
-        """Get the ResourceGroupsTaggingAPI client, creating it if necessary.
+    def get_client(self, session_context: Optional[str] = None):
+        """Get the ResourceGroupsTaggingAPI client with optional session context.
         
+        Args:
+            session_context: Optional session key for cross-account access
+            
         Returns:
             boto3.client: The ResourceGroupsTaggingAPI client
         """
-        if self._client is None:
-            self._client = get_client('resourcegroupstaggingapi', self.region, self.profile)
-        return self._client
+        return get_client('resourcegroupstaggingapi', session_context=session_context)
     
-    async def get_tag_keys(self, next_token: Optional[str] = None, max_items: int = 100) -> Dict[str, Any]:
+    async def get_tag_keys(
+        self, 
+        next_token: Optional[str] = None, 
+        max_items: int = 100, 
+        session_context: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get all tag keys used across AWS resources.
 
         Args:
             next_token: Token for pagination
             max_items: Maximum number of items to return (defaults to 100)
+            session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
         Returns:
             Dict containing tag keys and pagination details
@@ -61,8 +67,11 @@ class ResourceTaggingService:
         logger.info(f"Invoked ResourceTaggingService.get_tag_keys(max_items={max_items})")
         
         try:
+            # Get client with session context
+            client = self.get_client(session_context=session_context)
+            
             # Configure paginator for proper pagination handling
-            paginator = self.client.get_paginator('get_tag_keys')
+            paginator = client.get_paginator('get_tag_keys')
             
             # Set up pagination configuration
             pagination_config = {
@@ -119,7 +128,13 @@ class ResourceTaggingService:
                 'error': str(e)
             }
 
-    async def get_tag_values(self, tag_key: str, next_token: Optional[str] = None, max_items: int = 100) -> Dict[str, Any]:
+    async def get_tag_values(
+        self, 
+        tag_key: str, 
+        next_token: Optional[str] = None, 
+        max_items: int = 100, 
+        session_context: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get all values for a specific tag key across AWS resources.
 
@@ -127,6 +142,7 @@ class ResourceTaggingService:
             tag_key: The tag key to get values for
             next_token: Token for pagination
             max_items: Maximum number of items to return (defaults to 100)
+            session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
         Returns:
             Dict containing tag values and pagination details
@@ -135,8 +151,11 @@ class ResourceTaggingService:
         logger.info(f"Invoked ResourceTaggingService.get_tag_values(tag_key={tag_key}, max_items={max_items})")
         
         try:
+            # Get client with session context
+            client = self.get_client(session_context=session_context)
+            
             # Configure paginator for proper pagination handling
-            paginator = self.client.get_paginator('get_tag_values')
+            paginator = client.get_paginator('get_tag_values')
             
             # Set up pagination configuration
             pagination_config = {
@@ -205,7 +224,8 @@ class ResourceTaggingService:
         tag_value: Optional[str] = None, 
         resource_types: Optional[List[str]] = None,
         next_token: Optional[str] = None, 
-        max_items: Optional[int] = None
+        max_items: Optional[int] = None,
+        session_context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Get AWS resources filtered by tag key and optionally by tag value.
@@ -216,6 +236,7 @@ class ResourceTaggingService:
             resource_types: Optional list of resource types to filter by
             next_token: Token for pagination
             max_items: Optional maximum number of items to return (if None, will use AWS default)
+            session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
         Returns:
             Dict containing resources and pagination details
@@ -224,6 +245,9 @@ class ResourceTaggingService:
         logger.info(f"Invoked ResourceTaggingService.get_resources_by_tags(tag_key={tag_key})")
         
         try:
+            # Get client with session context
+            client = self.get_client(session_context=session_context)
+            
             # Construct tag filters - always use "Values" (plural) even for a single value
             # This maintains consistency with AWS CLI which uses:
             # aws resourcegroupstaggingapi get-resources --tag-filters "Key=tagkey,Values=tagvalue"
@@ -232,7 +256,7 @@ class ResourceTaggingService:
                 tag_filters[0]["Values"] = [tag_value]
             
             # Setup pagination using the paginator
-            paginator = self.client.get_paginator('get_resources')
+            paginator = client.get_paginator('get_resources')
             
             # IMPORTANT: There's a parameter name mismatch between direct API calls and paginator usage:
             # - Direct AWS API calls use 'PaginationToken' as the parameter name
@@ -328,20 +352,32 @@ class ResourceTaggingService:
 _default_service = ResourceTaggingService()
 
 # Function wrappers for backward compatibility
-async def get_tag_keys(next_token: Optional[str] = None, max_items: int = 100) -> Dict[str, Any]:
+async def get_tag_keys(
+    next_token: Optional[str] = None, 
+    max_items: int = 100, 
+    session_context: Optional[str] = None
+) -> Dict[str, Any]:
     """Wrapper for ResourceTaggingService.get_tag_keys using default service instance."""
-    return await _default_service.get_tag_keys(next_token, max_items)
+    return await _default_service.get_tag_keys(next_token, max_items, session_context)
 
-async def get_tag_values(tag_key: str, next_token: Optional[str] = None, max_items: int = 100) -> Dict[str, Any]:
+async def get_tag_values(
+    tag_key: str, 
+    next_token: Optional[str] = None, 
+    max_items: int = 100, 
+    session_context: Optional[str] = None
+) -> Dict[str, Any]:
     """Wrapper for ResourceTaggingService.get_tag_values using default service instance."""
-    return await _default_service.get_tag_values(tag_key, next_token, max_items)
+    return await _default_service.get_tag_values(tag_key, next_token, max_items, session_context)
 
 async def get_resources_by_tags(
     tag_key: str,
     tag_value: Optional[str] = None,
     resource_types: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: Optional[int] = None
+    max_items: Optional[int] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Wrapper for ResourceTaggingService.get_resources_by_tags using default service instance."""
-    return await _default_service.get_resources_by_tags(tag_key, tag_value, resource_types, next_token, max_items) 
+    return await _default_service.get_resources_by_tags(
+        tag_key, tag_value, resource_types, next_token, max_items, session_context
+    ) 

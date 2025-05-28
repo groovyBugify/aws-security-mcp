@@ -14,20 +14,22 @@ from aws_security_mcp.services.base import get_client, handle_aws_error
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def get_access_analyzer_client(**kwargs: Any) -> boto3.client:
+def get_access_analyzer_client(session_context: Optional[str] = None, **kwargs: Any) -> boto3.client:
     """Get AWS IAM Access Analyzer client.
     
     Args:
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the boto3 client constructor
         
     Returns:
         boto3.client: An initialized IAM Access Analyzer client
     """
-    return get_client('accessanalyzer', **kwargs)
+    return get_client("accessanalyzer", session_context=session_context, **kwargs)
 
 def list_analyzers(
     max_results: int = 100,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """List IAM Access Analyzers.
@@ -35,12 +37,13 @@ def list_analyzers(
     Args:
         max_results: Maximum number of analyzers to return (1-1000)
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the list_analyzers API call
         
     Returns:
         List[Dict[str, Any]]: List of analyzers
     """
-    client = get_access_analyzer_client()
+    client = get_access_analyzer_client(session_context)
     
     params = {
         **kwargs
@@ -59,17 +62,18 @@ def list_analyzers(
         logger.error(f"Error listing IAM Access Analyzers: {e}")
         raise
 
-def get_analyzer(analyzer_name: str, **kwargs: Any) -> Dict[str, Any]:
+def get_analyzer(analyzer_name: str, session_context: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
     """Get details of a specific IAM Access Analyzer.
     
     Args:
         analyzer_name: The name of the analyzer to retrieve
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the get_analyzer API call
         
     Returns:
         Dict[str, Any]: Analyzer details
     """
-    client = get_access_analyzer_client()
+    client = get_access_analyzer_client(session_context)
     
     try:
         response = client.get_analyzer(
@@ -86,6 +90,7 @@ def list_findings(
     status: Optional[str] = None,
     max_results: int = 100,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """List IAM Access Analyzer findings.
@@ -95,12 +100,13 @@ def list_findings(
         status: Filter findings by status (ACTIVE, ARCHIVED, RESOLVED)
         max_results: Maximum number of findings to return (1-100)
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the list_findings API call
         
     Returns:
         Tuple[List[Dict[str, Any]], Optional[str]]: Tuple containing list of findings and next token for pagination
     """
-    client = get_access_analyzer_client()
+    client = get_access_analyzer_client(session_context)
     
     params = {
         'analyzerArn': analyzer_arn,
@@ -126,6 +132,7 @@ def list_findings(
 def get_finding(
     analyzer_arn: str,
     finding_id: str,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Get details of a specific finding.
@@ -133,12 +140,13 @@ def get_finding(
     Args:
         analyzer_arn: ARN of the analyzer
         finding_id: ID of the finding
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the get_finding API call
         
     Returns:
         Dict[str, Any]: Finding details
     """
-    client = get_access_analyzer_client()
+    client = get_access_analyzer_client(session_context)
     
     try:
         response = client.get_finding(
@@ -157,6 +165,7 @@ def list_findings_by_category(
     status: str = "ACTIVE",
     max_results: int = 100,
     next_token: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """List findings filtered by resource type category.
@@ -167,12 +176,13 @@ def list_findings_by_category(
         status: Filter findings by status (ACTIVE, ARCHIVED, RESOLVED)
         max_results: Maximum number of findings to return (1-100)
         next_token: Token for pagination
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the list_findings API call
         
     Returns:
         Tuple[List[Dict[str, Any]], Optional[str]]: Tuple containing list of findings matching the category and next token for pagination
     """
-    client = get_access_analyzer_client()
+    client = get_access_analyzer_client(session_context)
     
     # Create combined filter for status and resource type
     filter_criteria = {

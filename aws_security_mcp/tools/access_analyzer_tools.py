@@ -12,16 +12,26 @@ logger = logging.getLogger(__name__)
 
 
 @register_tool()
-async def list_analyzers() -> str:
+async def list_analyzers(session_context: Optional[str] = None) -> str:
     """List all IAM Access Analyzers in the account.
+    
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
     
     Returns:
         JSON string with Access Analyzers
+        
+    Examples:
+        # Single account (default)
+        list_analyzers()
+        
+        # Cross-account access
+        list_analyzers(session_context="123456789012_aws_dev")
     """
-    logger.info("Listing Access Analyzers")
+    logger.info(f"Listing Access Analyzers (session_context={session_context})")
     
     try:
-        analyzers = access_analyzer.list_analyzers()
+        analyzers = access_analyzer.list_analyzers(session_context=session_context)
         
         response = {
             "status": "success",
@@ -39,19 +49,27 @@ async def list_analyzers() -> str:
 
 
 @register_tool()
-async def get_analyzer(analyzer_name: str) -> str:
+async def get_analyzer(analyzer_name: str, session_context: Optional[str] = None) -> str:
     """Get detailed information about a specific Access Analyzer.
     
     Args:
         analyzer_name: Name of the Access Analyzer
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with analyzer details
+        
+    Examples:
+        # Single account (default)
+        get_analyzer("MyAnalyzer")
+        
+        # Cross-account access
+        get_analyzer("MyAnalyzer", session_context="123456789012_aws_dev")
     """
-    logger.info(f"Getting analyzer details for {analyzer_name}")
+    logger.info(f"Getting analyzer details for {analyzer_name} (session_context={session_context})")
     
     try:
-        analyzer = access_analyzer.get_analyzer(analyzer_name)
+        analyzer = access_analyzer.get_analyzer(analyzer_name, session_context=session_context)
         
         response = {
             "status": "success",
@@ -67,23 +85,24 @@ async def get_analyzer(analyzer_name: str) -> str:
         })
 
 
-def _get_analyzer_arn(analyzer_name: str) -> Optional[str]:
+def _get_analyzer_arn(analyzer_name: str, session_context: Optional[str] = None) -> Optional[str]:
     """Helper function to get analyzer ARN from name.
     
     Args:
         analyzer_name: Name of the analyzer
+        session_context: Optional session key for cross-account access
         
     Returns:
         Optional[str]: ARN of the analyzer if found, None otherwise
     """
     try:
         # First try to get the specific analyzer
-        analyzer = access_analyzer.get_analyzer(analyzer_name)
+        analyzer = access_analyzer.get_analyzer(analyzer_name, session_context=session_context)
         if analyzer and 'arn' in analyzer:
             return analyzer['arn']
         
         # If not found by direct lookup, try listing all analyzers
-        analyzers = access_analyzer.list_analyzers()
+        analyzers = access_analyzer.list_analyzers(session_context=session_context)
         for analyzer in analyzers:
             if analyzer.get('name') == analyzer_name:
                 return analyzer.get('arn')
@@ -95,7 +114,7 @@ def _get_analyzer_arn(analyzer_name: str) -> Optional[str]:
 
 
 @register_tool()
-async def list_findings(analyzerArn: str, status: Optional[str] = None, next_token: Optional[str] = None, limit: int = 100) -> str:
+async def list_findings(analyzerArn: str, status: Optional[str] = None, next_token: Optional[str] = None, limit: int = 100, session_context: Optional[str] = None) -> str:
     """List findings from a specific IAM Access Analyzer.
     
     Args:
@@ -103,11 +122,19 @@ async def list_findings(analyzerArn: str, status: Optional[str] = None, next_tok
         status: Optional filter for finding status (ACTIVE, ARCHIVED, RESOLVED)
         next_token: Pagination token for fetching the next set of results
         limit: Maximum number of findings to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with findings
+        
+    Examples:
+        # Single account (default)
+        list_findings("MyAnalyzer")
+        
+        # Cross-account access
+        list_findings("MyAnalyzer", session_context="123456789012_aws_dev")
     """
-    logger.info(f"Listing findings for analyzer {analyzerArn} (status={status}, next_token={next_token}, limit={limit})")
+    logger.info(f"Listing findings for analyzer {analyzerArn} (status={status}, next_token={next_token}, limit={limit}, session_context={session_context})")
     
     valid_statuses = ['ACTIVE', 'ARCHIVED', 'RESOLVED']
     
@@ -120,7 +147,7 @@ async def list_findings(analyzerArn: str, status: Optional[str] = None, next_tok
     try:
         # If the input looks like a name rather than an ARN, try to resolve it
         if not analyzerArn.startswith('arn:aws:access-analyzer:'):
-            resolved_arn = _get_analyzer_arn(analyzerArn)
+            resolved_arn = _get_analyzer_arn(analyzerArn, session_context)
             if resolved_arn:
                 analyzerArn = resolved_arn
             else:
@@ -133,7 +160,8 @@ async def list_findings(analyzerArn: str, status: Optional[str] = None, next_tok
             analyzer_arn=analyzerArn, 
             status=status, 
             max_results=limit, 
-            next_token=next_token
+            next_token=next_token,
+            session_context=session_context
         )
         
         response = {
@@ -156,22 +184,30 @@ async def list_findings(analyzerArn: str, status: Optional[str] = None, next_tok
 
 
 @register_tool()
-async def get_finding(analyzerArn: str, finding_id: str) -> str:
+async def get_finding(analyzerArn: str, finding_id: str, session_context: Optional[str] = None) -> str:
     """Get detailed information about a specific Access Analyzer finding.
     
     Args:
         analyzerArn: ARN of the Access Analyzer
         finding_id: ID of the finding
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with finding details
+        
+    Examples:
+        # Single account (default)
+        get_finding("MyAnalyzer", "12345678-1234-1234-1234-123456789012")
+        
+        # Cross-account access
+        get_finding("MyAnalyzer", "12345678-1234-1234-1234-123456789012", session_context="123456789012_aws_dev")
     """
-    logger.info(f"Getting finding details for analyzer {analyzerArn}, finding {finding_id}")
+    logger.info(f"Getting finding details for analyzer {analyzerArn}, finding {finding_id} (session_context={session_context})")
     
     try:
         # If the input looks like a name rather than an ARN, try to resolve it
         if not analyzerArn.startswith('arn:aws:access-analyzer:'):
-            resolved_arn = _get_analyzer_arn(analyzerArn)
+            resolved_arn = _get_analyzer_arn(analyzerArn, session_context)
             if resolved_arn:
                 analyzerArn = resolved_arn
             else:
@@ -180,7 +216,7 @@ async def get_finding(analyzerArn: str, finding_id: str) -> str:
                     "message": f"Analyzer with name '{analyzerArn}' not found"
                 })
             
-        finding = access_analyzer.get_finding(analyzerArn, finding_id)
+        finding = access_analyzer.get_finding(analyzerArn, finding_id, session_context=session_context)
         
         response = {
             "status": "success",
@@ -202,7 +238,8 @@ async def list_findings_by_category(
     resource_type: str,
     status: str = "ACTIVE",
     next_token: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
+    session_context: Optional[str] = None
 ) -> str:
     """Get findings filtered by resource type category.
     
@@ -212,11 +249,19 @@ async def list_findings_by_category(
         status: Finding status filter (ACTIVE, ARCHIVED, RESOLVED)
         next_token: Pagination token for fetching the next set of results
         limit: Maximum number of findings to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON string with findings for the specified category
+        
+    Examples:
+        # Single account (default)
+        list_findings_by_category("MyAnalyzer", "AWS::S3::Bucket")
+        
+        # Cross-account access
+        list_findings_by_category("MyAnalyzer", "AWS::S3::Bucket", session_context="123456789012_aws_dev")
     """
-    logger.info(f"Getting findings by category for analyzer {analyzerArn}, resource type {resource_type}, status {status}, next_token {next_token}, limit {limit}")
+    logger.info(f"Getting findings by category for analyzer {analyzerArn}, resource type {resource_type}, status {status}, next_token {next_token}, limit {limit} (session_context={session_context})")
     
     valid_statuses = ['ACTIVE', 'ARCHIVED', 'RESOLVED']
     
@@ -255,7 +300,7 @@ async def list_findings_by_category(
     try:
         # If the input looks like a name rather than an ARN, try to resolve it
         if not analyzerArn.startswith('arn:aws:access-analyzer:'):
-            resolved_arn = _get_analyzer_arn(analyzerArn)
+            resolved_arn = _get_analyzer_arn(analyzerArn, session_context)
             if resolved_arn:
                 analyzerArn = resolved_arn
             else:
@@ -269,7 +314,8 @@ async def list_findings_by_category(
             resource_type=resource_type,
             status=status,
             max_results=limit,
-            next_token=next_token
+            next_token=next_token,
+            session_context=session_context
         )
         
         response = {

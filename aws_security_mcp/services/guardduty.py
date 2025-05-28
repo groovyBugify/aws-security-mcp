@@ -12,29 +12,31 @@ from aws_security_mcp.services.base import get_aws_session, get_client, handle_p
 logger = logging.getLogger(__name__)
 
 
-def get_guardduty_client(**kwargs: Any) -> boto3.client:
+def get_guardduty_client(session_context: Optional[str] = None, **kwargs: Any) -> boto3.client:
     """Get AWS GuardDuty client.
     
     Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the boto3 client constructor
         
     Returns:
         boto3.client: An initialized GuardDuty client
     """
-    return get_client('guardduty', **kwargs)
+    return get_client('guardduty', session_context=session_context, **kwargs)
 
 
-def list_detectors(max_results: int = 100, **kwargs: Any) -> List[Dict[str, Any]]:
+def list_detectors(max_results: int = 100, session_context: Optional[str] = None, **kwargs: Any) -> List[Dict[str, Any]]:
     """List all GuardDuty detectors in the current region.
     
     Args:
         max_results: Maximum number of detectors to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the list_detectors API call
         
     Returns:
         List[Dict[str, Any]]: List of detector details including DetectorId
     """
-    client = get_guardduty_client()
+    client = get_guardduty_client(session_context=session_context)
     
     # Set up parameters
     params = {
@@ -81,17 +83,18 @@ def list_detectors(max_results: int = 100, **kwargs: Any) -> List[Dict[str, Any]
         return []
 
 
-def get_detector(detector_id: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
+def get_detector(detector_id: str, session_context: Optional[str] = None, **kwargs: Any) -> Optional[Dict[str, Any]]:
     """Get detailed information about a GuardDuty detector.
     
     Args:
         detector_id: GuardDuty detector ID
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the get_detector API call
         
     Returns:
         Optional[Dict[str, Any]]: Detector details or None if not found
     """
-    client = get_guardduty_client()
+    client = get_guardduty_client(session_context=session_context)
     
     try:
         response = client.get_detector(
@@ -120,13 +123,16 @@ def get_detector(detector_id: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_detector_id() -> Optional[str]:
+def get_detector_id(session_context: Optional[str] = None) -> Optional[str]:
     """Get the first GuardDuty detector ID in the current region.
+    
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
     
     Returns:
         Optional[str]: The first detector ID or None if no detectors exist
     """
-    detectors = list_detectors()
+    detectors = list_detectors(session_context=session_context)
     if detectors:
         return detectors[0].get('DetectorId')
     return None
@@ -136,6 +142,7 @@ def list_findings(
     detector_id: Optional[str] = None,
     finding_criteria: Optional[Dict[str, Any]] = None,
     max_results: int = 50,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[str]:
     """List GuardDuty findings based on criteria.
@@ -144,6 +151,7 @@ def list_findings(
         detector_id: GuardDuty detector ID (if None, gets the first detector)
         finding_criteria: Criteria to filter findings
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the list_findings API call
         
     Returns:
@@ -151,11 +159,11 @@ def list_findings(
     """
     # Get detector ID if not provided
     if detector_id is None:
-        detector_id = get_detector_id()
+        detector_id = get_detector_id(session_context=session_context)
         if detector_id is None:
             return []
     
-    client = get_guardduty_client()
+    client = get_guardduty_client(session_context=session_context)
     
     # Set up parameters
     params = {
@@ -209,6 +217,7 @@ def get_findings(
     detector_id: Optional[str] = None,
     finding_ids: Optional[List[str]] = None,
     max_results: int = 50,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """Get detailed information about GuardDuty findings.
@@ -217,6 +226,7 @@ def get_findings(
         detector_id: GuardDuty detector ID (if None, gets the first detector)
         finding_ids: List of finding IDs to get details for
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the get_findings API call
         
     Returns:
@@ -224,18 +234,18 @@ def get_findings(
     """
     # Get detector ID if not provided
     if detector_id is None:
-        detector_id = get_detector_id()
+        detector_id = get_detector_id(session_context=session_context)
         if detector_id is None:
             return []
     
     # If no finding IDs provided, list findings
     if not finding_ids:
-        finding_ids = list_findings(detector_id=detector_id, max_results=max_results)
+        finding_ids = list_findings(detector_id=detector_id, max_results=max_results, session_context=session_context)
     
     if not finding_ids:
         return []
     
-    client = get_guardduty_client()
+    client = get_guardduty_client(session_context=session_context)
     all_findings = []
     
     try:
@@ -273,6 +283,7 @@ def get_findings(
 def list_ip_sets(
     detector_id: Optional[str] = None,
     max_results: int = 50,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """List IP sets for a GuardDuty detector.
@@ -280,6 +291,7 @@ def list_ip_sets(
     Args:
         detector_id: GuardDuty detector ID (if None, gets the first detector)
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the list_ip_sets API call
         
     Returns:
@@ -287,11 +299,11 @@ def list_ip_sets(
     """
     # Get detector ID if not provided
     if detector_id is None:
-        detector_id = get_detector_id()
+        detector_id = get_detector_id(session_context=session_context)
         if detector_id is None:
             return []
     
-    client = get_guardduty_client()
+    client = get_guardduty_client(session_context=session_context)
     
     # Set up parameters
     params = {
@@ -341,6 +353,7 @@ def list_ip_sets(
 def list_threat_intel_sets(
     detector_id: Optional[str] = None,
     max_results: int = 50,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     """List threat intelligence sets for a GuardDuty detector.
@@ -348,6 +361,7 @@ def list_threat_intel_sets(
     Args:
         detector_id: GuardDuty detector ID (if None, gets the first detector)
         max_results: Maximum number of results to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         **kwargs: Additional arguments to pass to the list_threat_intel_sets API call
         
     Returns:
@@ -355,11 +369,11 @@ def list_threat_intel_sets(
     """
     # Get detector ID if not provided
     if detector_id is None:
-        detector_id = get_detector_id()
+        detector_id = get_detector_id(session_context=session_context)
         if detector_id is None:
             return []
     
-    client = get_guardduty_client()
+    client = get_guardduty_client(session_context=session_context)
     
     # Set up parameters
     params = {

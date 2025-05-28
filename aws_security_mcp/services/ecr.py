@@ -11,14 +11,17 @@ from aws_security_mcp.services.base import get_client
 
 logger = logging.getLogger(__name__)
 
-async def get_repositories() -> Dict[str, Any]:
+async def get_repositories(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve all ECR repositories.
+    
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
     
     Returns:
         Dict containing ECR repositories or error information
     """
     try:
-        client = get_client('ecr')
+        client = get_client('ecr', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('describe_repositories')
@@ -45,17 +48,18 @@ async def get_repositories() -> Dict[str, Any]:
             "count": 0
         }
 
-async def get_repository_policy(repository_name: str) -> Dict[str, Any]:
+async def get_repository_policy(repository_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve the policy for an ECR repository.
     
     Args:
         repository_name: Name of the ECR repository
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing repository policy or error information
     """
     try:
-        client = get_client('ecr')
+        client = get_client('ecr', session_context=session_context)
         
         response = client.get_repository_policy(
             repositoryName=repository_name
@@ -88,18 +92,19 @@ async def get_repository_policy(repository_name: str) -> Dict[str, Any]:
             "policy": None
         }
 
-async def get_repository_scan_findings(repository_name: str, image_tag: str = 'latest') -> Dict[str, Any]:
+async def get_repository_scan_findings(repository_name: str, image_tag: str = 'latest', session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve vulnerability scan findings for an ECR repository image.
     
     Args:
         repository_name: Name of the ECR repository
         image_tag: Tag of the image to check, defaults to 'latest'
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing scan findings or error information
     """
     try:
-        client = get_client('ecr')
+        client = get_client('ecr', session_context=session_context)
         
         # First, get the image digest for the specified tag
         response = client.describe_images(
@@ -192,17 +197,18 @@ async def get_repository_scan_findings(repository_name: str, image_tag: str = 'l
             "findings_count": 0
         }
 
-async def get_repository_images(repository_name: str) -> Dict[str, Any]:
+async def get_repository_images(repository_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve images from an ECR repository.
     
     Args:
         repository_name: Name of the ECR repository
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing repository images or error information
     """
     try:
-        client = get_client('ecr')
+        client = get_client('ecr', session_context=session_context)
         
         # Use paginator to handle pagination
         paginator = client.get_paginator('describe_images')
@@ -231,18 +237,19 @@ async def get_repository_images(repository_name: str) -> Dict[str, Any]:
             "repository_name": repository_name
         }
 
-async def search_repositories(repository_name: Optional[str] = None, repository_names: Optional[List[str]] = None) -> Dict[str, Any]:
+async def search_repositories(repository_name: Optional[str] = None, repository_names: Optional[List[str]] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Search for ECR repositories by exact name match using the AWS ECR describe_repositories API.
     
     Args:
         repository_name: Optional single repository name to search for
         repository_names: Optional list of repository names to search for
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing matching repositories or error information
     """
     try:
-        client = get_client('ecr')
+        client = get_client('ecr', session_context=session_context)
         
         # Prepare repository names list for API call
         repos_to_search = []
@@ -272,7 +279,7 @@ async def search_repositories(repository_name: Optional[str] = None, repository_
                 raise  # Re-raise other client errors
         else:
             # If no names provided, get all repositories
-            all_repositories_result = await get_repositories()
+            all_repositories_result = await get_repositories(session_context=session_context)
             if not all_repositories_result.get("success", False):
                 return all_repositories_result
             matching_repositories = all_repositories_result.get("repositories", [])
@@ -283,11 +290,11 @@ async def search_repositories(repository_name: Optional[str] = None, repository_
             repo_name = repo.get('repositoryName')
             
             # Get repository policy
-            policy_result = await get_repository_policy(repo_name)
+            policy_result = await get_repository_policy(repo_name, session_context=session_context)
             repo_policy = policy_result.get("policy")
             
             # Get repository images
-            images_result = await get_repository_images(repo_name)
+            images_result = await get_repository_images(repo_name, session_context=session_context)
             repo_images = images_result.get("images", [])
             
             # Create detailed repository info

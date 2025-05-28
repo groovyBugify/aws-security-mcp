@@ -6,21 +6,31 @@ from typing import Dict, List, Optional, Any
 import boto3
 from botocore.exceptions import ClientError
 
+from aws_security_mcp.services.base import get_client
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
-def get_route53_client():
-    """Get a boto3 Route53 client."""
-    return boto3.client('route53')
+def get_route53_client(session_context: Optional[str] = None):
+    """Get a boto3 Route53 client with optional session context.
+    
+    Args:
+        session_context: Optional session key for cross-account access
+        
+    Returns:
+        boto3.client: The Route53 client
+    """
+    return get_client('route53', session_context=session_context)
 
 
-def list_hosted_zones(max_items: int = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_hosted_zones(max_items: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List Route53 hosted zones with pagination support.
     
     Args:
         max_items: Maximum number of hosted zones to return
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing hosted zones and pagination information
@@ -30,7 +40,7 @@ def list_hosted_zones(max_items: int = 100, next_token: Optional[str] = None) ->
             "is_truncated": bool    # Whether there are more items
         }
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     hosted_zones = []
     
     try:
@@ -74,16 +84,17 @@ def list_hosted_zones(max_items: int = 100, next_token: Optional[str] = None) ->
         }
 
 
-def get_hosted_zone(zone_id: str) -> Dict:
+def get_hosted_zone(zone_id: str, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific Route53 hosted zone.
     
     Args:
         zone_id: The ID of the hosted zone
+        session_context: Optional session key for cross-account access
         
     Returns:
         Hosted zone details dictionary
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     
     try:
         response = client.get_hosted_zone(Id=zone_id)
@@ -93,16 +104,17 @@ def get_hosted_zone(zone_id: str) -> Dict:
         return {}
 
 
-def get_hosted_zone_tags(zone_id: str) -> Dict[str, str]:
+def get_hosted_zone_tags(zone_id: str, session_context: Optional[str] = None) -> Dict[str, str]:
     """Get tags for a specific Route53 hosted zone.
     
     Args:
         zone_id: The ID of the hosted zone
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary of tag key-value pairs
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     tags = {}
     
     try:
@@ -124,13 +136,14 @@ def get_hosted_zone_tags(zone_id: str) -> Dict[str, str]:
         return {}
 
 
-def list_resource_record_sets(zone_id: str, max_items: int = 100, next_marker: Optional[str] = None) -> Dict[str, Any]:
+def list_resource_record_sets(zone_id: str, max_items: int = 100, next_marker: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List resource record sets for a specific Route53 hosted zone with pagination support.
     
     Args:
         zone_id: The ID of the hosted zone
         max_items: Maximum number of record sets to return
         next_marker: Marker for pagination (Name and Type of the resource record set that starts the next page)
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing resource record sets and pagination information
@@ -140,7 +153,7 @@ def list_resource_record_sets(zone_id: str, max_items: int = 100, next_marker: O
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     record_sets = []
     
     try:
@@ -184,12 +197,13 @@ def list_resource_record_sets(zone_id: str, max_items: int = 100, next_marker: O
         }
 
 
-def list_health_checks(max_items: int = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_health_checks(max_items: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List Route53 health checks with pagination support.
     
     Args:
         max_items: Maximum number of health checks to return
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing health checks and pagination information
@@ -199,7 +213,7 @@ def list_health_checks(max_items: int = 100, next_token: Optional[str] = None) -
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     health_checks = []
     
     try:
@@ -243,16 +257,17 @@ def list_health_checks(max_items: int = 100, next_token: Optional[str] = None) -
         }
 
 
-def get_health_check(health_check_id: str) -> Dict:
+def get_health_check(health_check_id: str, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific Route53 health check.
     
     Args:
         health_check_id: The ID of the health check
+        session_context: Optional session key for cross-account access
         
     Returns:
         Health check details dictionary
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     
     try:
         response = client.get_health_check(HealthCheckId=health_check_id)
@@ -262,12 +277,13 @@ def get_health_check(health_check_id: str) -> Dict:
         return {}
 
 
-def list_traffic_policies(max_items: int = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_traffic_policies(max_items: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List Route53 traffic policies with pagination support.
     
     Args:
         max_items: Maximum number of traffic policies to return
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing traffic policies and pagination information
@@ -277,7 +293,7 @@ def list_traffic_policies(max_items: int = 100, next_token: Optional[str] = None
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     traffic_policies = []
     
     try:
@@ -310,17 +326,18 @@ def list_traffic_policies(max_items: int = 100, next_token: Optional[str] = None
         }
 
 
-def get_traffic_policy(policy_id: str, version: int) -> Dict:
+def get_traffic_policy(policy_id: str, version: int, session_context: Optional[str] = None) -> Dict:
     """Get details for a specific Route53 traffic policy.
     
     Args:
         policy_id: The ID of the traffic policy
         version: The version of the traffic policy
+        session_context: Optional session key for cross-account access
         
     Returns:
         Traffic policy details dictionary
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     
     try:
         response = client.get_traffic_policy(Id=policy_id, Version=version)
@@ -330,12 +347,13 @@ def get_traffic_policy(policy_id: str, version: int) -> Dict:
         return {}
 
 
-def list_traffic_policy_instances(max_items: int = 100, next_token: Optional[str] = None) -> Dict[str, Any]:
+def list_traffic_policy_instances(max_items: int = 100, next_token: Optional[str] = None, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List Route53 traffic policy instances with pagination support.
     
     Args:
         max_items: Maximum number of traffic policy instances to return
         next_token: Pagination token from previous request
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing traffic policy instances and pagination information
@@ -345,7 +363,7 @@ def list_traffic_policy_instances(max_items: int = 100, next_token: Optional[str
             "is_truncated": bool     # Whether there are more items
         }
     """
-    client = get_route53_client()
+    client = get_route53_client(session_context=session_context)
     instances = []
     
     try:
