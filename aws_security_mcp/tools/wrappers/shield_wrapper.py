@@ -24,7 +24,7 @@ from aws_security_mcp.tools.shield_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def shield_security_operations(operation: str, **params) -> str:
+async def shield_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Shield Security Operations Hub - Comprehensive DDoS protection and attack monitoring.
     
     🛡️ SUBSCRIPTION MANAGEMENT:
@@ -67,6 +67,7 @@ async def shield_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The Shield operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access
         
         # Resource parameters:
         resource_arn: ARN of resource for protection details
@@ -91,7 +92,7 @@ async def shield_security_operations(operation: str, **params) -> str:
     
     try:
         if operation == "get_subscription_status":
-            result = await _get_shield_subscription_status()
+            result = await _get_shield_subscription_status(session_context=session_context)
             return json.dumps(result)
             
         elif operation == "list_protected_resources":
@@ -100,7 +101,8 @@ async def shield_security_operations(operation: str, **params) -> str:
             
             result = await _list_shield_protected_resources(
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             return json.dumps(result)
             
@@ -110,7 +112,8 @@ async def shield_security_operations(operation: str, **params) -> str:
             
             result = await _list_shield_protections(
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             return json.dumps(result)
             
@@ -122,7 +125,7 @@ async def shield_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_protection_details', resource_arn='arn:aws:cloudfront::123456789012:distribution/EDFDVBD6EXAMPLE'"
                 })
             
-            result = await _get_shield_protection_details(resource_arn=resource_arn)
+            result = await _get_shield_protection_details(resource_arn=resource_arn, session_context=session_context)
             return json.dumps(result)
             
         elif operation == "list_attacks":
@@ -133,7 +136,8 @@ async def shield_security_operations(operation: str, **params) -> str:
             result = await _list_shield_attacks(
                 days=days,
                 limit=limit,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             return json.dumps(result)
             
@@ -145,11 +149,11 @@ async def shield_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_attack_details', attack_id='AttackId-12345678-1234-1234-1234-123456789012'"
                 })
             
-            result = await _get_shield_attack_details(attack_id=attack_id)
+            result = await _get_shield_attack_details(attack_id=attack_id, session_context=session_context)
             return json.dumps(result)
             
         elif operation == "get_summary":
-            result = await _get_shield_summary()
+            result = await _get_shield_summary(session_context=session_context)
             return json.dumps(result)
             
         else:
@@ -183,12 +187,15 @@ async def shield_security_operations(operation: str, **params) -> str:
         })
 
 @register_tool()
-async def discover_shield_operations() -> str:
+async def discover_shield_operations(session_context: Optional[str] = None) -> str:
     """Discover all available Shield operations with detailed usage examples.
     
     This tool provides comprehensive documentation of Shield operations available
     through the shield_security_operations tool, including parameter requirements
     and practical usage examples for DDoS protection and attack monitoring.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         Detailed catalog of Shield operations with examples and parameter descriptions

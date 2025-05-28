@@ -46,14 +46,17 @@ async def run_in_executor(func: Callable, *args, **kwargs) -> Any:
     partial_func = functools.partial(func, *args, **kwargs)
     return await loop.run_in_executor(_executor, partial_func)
 
-def list_buckets() -> List[Dict[str, Any]]:
+def list_buckets(session_context: Optional[str] = None) -> List[Dict[str, Any]]:
     """List all S3 buckets in the account using pagination.
+
+    Args:
+        session_context: Optional session key for cross-account access
 
     Returns:
         List of bucket dictionaries with name and creation date
     """
     try:
-        client = get_client('s3')
+        client = get_client('s3', session_context=session_context)
         paginator = client.get_paginator('list_buckets')
         
         all_buckets = []
@@ -67,17 +70,18 @@ def list_buckets() -> List[Dict[str, Any]]:
         logger.error(f"Error listing S3 buckets: {str(e)}")
         return []
 
-def get_bucket_location(bucket_name: str) -> str:
+def get_bucket_location(bucket_name: str, session_context: Optional[str] = None) -> str:
     """Get the region in which the bucket is located.
 
-        Args:
+    Args:
         bucket_name: Name of the S3 bucket
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Region name as string or 'us-east-1' if None
     """
     try:
-        client = get_client('s3')
+        client = get_client('s3', session_context=session_context)
         response = client.get_bucket_location(Bucket=bucket_name)
         location = response.get('LocationConstraint')
         
@@ -94,18 +98,19 @@ def get_bucket_location(bucket_name: str) -> str:
         logger.error(f"Error getting bucket location for {bucket_name}: {str(e)}")
         return 'unknown'
 
-def get_bucket_policy(bucket_name: str, region: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_bucket_policy(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get the bucket policy if it exists.
 
-        Args:
-            bucket_name: Name of the S3 bucket
+    Args:
+        bucket_name: Name of the S3 bucket
         region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Dictionary containing the policy or None if no policy exists
-        """
+    """
     try:
-        client = get_client('s3', region=region)
+        client = get_client('s3', region=region, session_context=session_context)
         response = client.get_bucket_policy(Bucket=bucket_name)
         
         # Convert the policy string to a dictionary
@@ -120,30 +125,32 @@ def get_bucket_policy(bucket_name: str, region: Optional[str] = None) -> Optiona
         logger.error(f"Error getting bucket policy for {bucket_name}: {str(e)}")
         return None
 
-def get_bucket_acl(bucket_name: str, region: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_bucket_acl(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get the bucket ACL.
 
-        Args:
-            bucket_name: Name of the S3 bucket
+    Args:
+        bucket_name: Name of the S3 bucket
         region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Dictionary containing the ACL information or None if error
-        """
+    """
     try:
-        client = get_client('s3', region=region)
+        client = get_client('s3', region=region, session_context=session_context)
         response = client.get_bucket_acl(Bucket=bucket_name)
         return response
     except ClientError as e:
         logger.error(f"Error getting bucket ACL for {bucket_name}: {str(e)}")
         return None
 
-async def get_bucket_public_access_block(bucket_name: str) -> Dict[str, bool]:
+async def get_bucket_public_access_block(bucket_name: str, session_context: Optional[str] = None) -> Dict[str, bool]:
     """
     Get the public access block configuration for a specific bucket.
     
     Args:
         bucket_name: Name of the S3 bucket
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary containing the public access block settings for the bucket
@@ -152,7 +159,7 @@ async def get_bucket_public_access_block(bucket_name: str) -> Dict[str, bool]:
         ClientError: If there's an issue accessing the bucket's public access block configuration
     """
     try:
-        s3_client = boto3.client('s3')
+        s3_client = get_client('s3', session_context=session_context)
         response = await run_in_executor(
             s3_client.get_public_access_block,
             Bucket=bucket_name
@@ -179,15 +186,19 @@ async def get_bucket_public_access_block(bucket_name: str) -> Dict[str, bool]:
             logging.error(f"Error getting public access block for bucket {bucket_name}: {str(e)}")
             raise
 
-def get_account_public_access_block() -> Optional[Dict[str, Any]]:
+def get_account_public_access_block(session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get the account-level public access block settings.
 
-        Returns:
+    Args:
+        session_context: Optional session key for cross-account access
+
+    Returns:
         Dictionary containing account-level public access block configuration or None if not set
-        """
+    """
     try:
-        s3control = get_client('s3control')
-        account_id = get_client('sts').get_caller_identity().get('Account')
+        s3control = get_client('s3control', session_context=session_context)
+        sts_client = get_client('sts', session_context=session_context)
+        account_id = sts_client.get_caller_identity().get('Account')
         response = s3control.get_public_access_block(AccountId=account_id)
         return response
     except ClientError as e:
@@ -198,18 +209,19 @@ def get_account_public_access_block() -> Optional[Dict[str, Any]]:
         logger.error(f"Error getting account public access block: {str(e)}")
         return None
 
-def get_bucket_encryption(bucket_name: str, region: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_bucket_encryption(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get bucket encryption settings.
 
-        Args:
-            bucket_name: Name of the S3 bucket
+    Args:
+        bucket_name: Name of the S3 bucket
         region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Dictionary containing encryption settings or None if not configured
-        """
+    """
     try:
-        client = get_client('s3', region=region)
+        client = get_client('s3', region=region, session_context=session_context)
         response = client.get_bucket_encryption(Bucket=bucket_name)
         return response
     except ClientError as e:
@@ -220,54 +232,57 @@ def get_bucket_encryption(bucket_name: str, region: Optional[str] = None) -> Opt
         logger.error(f"Error getting bucket encryption for {bucket_name}: {str(e)}")
         return None
 
-def get_bucket_versioning(bucket_name: str, region: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_bucket_versioning(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get bucket versioning settings.
 
-        Args:
-            bucket_name: Name of the S3 bucket
+    Args:
+        bucket_name: Name of the S3 bucket
         region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Dictionary containing versioning settings or None if error
-        """
+    """
     try:
-        client = get_client('s3', region=region)
+        client = get_client('s3', region=region, session_context=session_context)
         response = client.get_bucket_versioning(Bucket=bucket_name)
         return response
     except ClientError as e:
         logger.error(f"Error getting bucket versioning for {bucket_name}: {str(e)}")
         return None
 
-def get_bucket_logging(bucket_name: str, region: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_bucket_logging(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get bucket logging settings.
 
-        Args:
-            bucket_name: Name of the S3 bucket
+    Args:
+        bucket_name: Name of the S3 bucket
         region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Dictionary containing logging settings or None if error
-        """
+    """
     try:
-        client = get_client('s3', region=region)
+        client = get_client('s3', region=region, session_context=session_context)
         response = client.get_bucket_logging(Bucket=bucket_name)
         return response
     except ClientError as e:
         logger.error(f"Error getting bucket logging for {bucket_name}: {str(e)}")
         return None
 
-def get_bucket_lifecycle(bucket_name: str, region: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_bucket_lifecycle(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get bucket lifecycle configuration.
         
-        Args:
-            bucket_name: Name of the S3 bucket
+    Args:
+        bucket_name: Name of the S3 bucket
         region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
             
-        Returns:
+    Returns:
         Dictionary containing lifecycle configuration or None if not set
-        """
+    """
     try:
-        client = get_client('s3', region=region)
+        client = get_client('s3', region=region, session_context=session_context)
         response = client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
         return response
     except ClientError as e:
@@ -278,11 +293,12 @@ def get_bucket_lifecycle(bucket_name: str, region: Optional[str] = None) -> Opti
         logger.error(f"Error getting bucket lifecycle for {bucket_name}: {str(e)}")
         return None
 
-def get_bucket_details(bucket_name: str) -> Dict[str, Any]:
+def get_bucket_details(bucket_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific S3 bucket.
 
     Args:
         bucket_name: Name of the S3 bucket
+        session_context: Optional session key for cross-account access
 
     Returns:
         Dictionary with comprehensive bucket details
@@ -293,15 +309,15 @@ def get_bucket_details(bucket_name: str) -> Dict[str, Any]:
         }
         
         # Get bucket location (region)
-        region = get_bucket_location(bucket_name)
+        region = get_bucket_location(bucket_name, session_context)
         bucket_details['Region'] = region
         
         # Get all the bucket details using regional client if needed
-        policy = get_bucket_policy(bucket_name, region)
+        policy = get_bucket_policy(bucket_name, region, session_context)
         if policy:
             bucket_details['Policy'] = policy
             
-        acl = get_bucket_acl(bucket_name, region)
+        acl = get_bucket_acl(bucket_name, region, session_context)
         if acl:
             bucket_details['ACL'] = acl
         
@@ -310,7 +326,7 @@ def get_bucket_details(bucket_name: str) -> Dict[str, Any]:
         # Just provide a warning that public access block might not be included
         try:
             # Use boto3 directly for synchronous call
-            s3_client = get_client('s3')
+            s3_client = get_client('s3', session_context=session_context)
             resp = s3_client.get_public_access_block(Bucket=bucket_name)
             if resp and 'PublicAccessBlockConfiguration' in resp:
                 bucket_details['PublicAccessBlock'] = {
@@ -320,24 +336,24 @@ def get_bucket_details(bucket_name: str) -> Dict[str, Any]:
             # Not critical, just log and continue
             logger.warning(f"Could not get public access block for {bucket_name} synchronously: {str(e)}")
         
-        encryption = get_bucket_encryption(bucket_name, region)
+        encryption = get_bucket_encryption(bucket_name, region, session_context)
         if encryption:
             bucket_details['Encryption'] = encryption
         
-        versioning = get_bucket_versioning(bucket_name, region)
+        versioning = get_bucket_versioning(bucket_name, region, session_context)
         if versioning:
             bucket_details['Versioning'] = versioning
         
-        logging = get_bucket_logging(bucket_name, region)
+        logging = get_bucket_logging(bucket_name, region, session_context)
         if logging:
             bucket_details['Logging'] = logging
         
-        lifecycle = get_bucket_lifecycle(bucket_name, region)
+        lifecycle = get_bucket_lifecycle(bucket_name, region, session_context)
         if lifecycle:
             bucket_details['Lifecycle'] = lifecycle
             
         # Get account-level public access block settings
-        account_public_access_block = get_account_public_access_block()
+        account_public_access_block = get_account_public_access_block(session_context)
         if account_public_access_block:
             bucket_details['account_public_access_block'] = account_public_access_block
         
@@ -348,15 +364,17 @@ def get_bucket_details(bucket_name: str) -> Dict[str, Any]:
 
 def get_bucket_details_batch(
     bucket_names: List[str], 
-    max_workers: int = 10
+    max_workers: int = 10,
+    session_context: Optional[str] = None
 ) -> Dict[str, Dict[str, Any]]:
     """Get detailed information about multiple S3 buckets in parallel.
 
-        Args:
+    Args:
         bucket_names: List of bucket names to get details for
         max_workers: Maximum number of threads to use
+        session_context: Optional session key for cross-account access
 
-        Returns:
+    Returns:
         Dictionary mapping bucket names to their detailed information
     """
     results = {}
@@ -364,7 +382,7 @@ def get_bucket_details_batch(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Create a future for each bucket
         future_to_bucket = {
-            executor.submit(get_bucket_details, bucket_name): bucket_name
+            executor.submit(get_bucket_details, bucket_name, session_context): bucket_name
             for bucket_name in bucket_names
         }
         
@@ -379,12 +397,13 @@ def get_bucket_details_batch(
     
     return results
 
-def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dict] = None) -> Tuple[bool, Dict]:
+def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dict] = None, session_context: Optional[str] = None) -> Tuple[bool, Dict]:
     """Check if an S3 bucket is publicly accessible.
     
     Args:
         bucket_name: Name of the bucket to check
         account_public_access_block: Account-level public access block settings to avoid repeated API calls
+        session_context: Optional session key for cross-account access
     
     Returns:
         Tuple containing:
@@ -417,16 +436,30 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
         
         # Get bucket-level public access block configuration
         try:
-            public_access_block = get_bucket_public_access_block(bucket_name)
+            # Use synchronous version to avoid async issues in this function
+            s3_client = get_client('s3', session_context=session_context)
+            try:
+                resp = s3_client.get_public_access_block(Bucket=bucket_name)
+                public_access_block = resp.get('PublicAccessBlockConfiguration', {})
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchPublicAccessBlockConfiguration':
+                    public_access_block = {
+                        'BlockPublicAcls': False,
+                        'IgnorePublicAcls': False,
+                        'BlockPublicPolicy': False,
+                        'RestrictPublicBuckets': False
+                    }
+                else:
+                    raise
+            
             assessment['public_access_block'] = public_access_block
             
             # If bucket-level blocks all public access, the bucket cannot be public
             if public_access_block:
-                block_config = public_access_block.get('PublicAccessBlockConfiguration', {})
-                all_blocked = (block_config.get('BlockPublicAcls', False) and 
-                              block_config.get('IgnorePublicAcls', False) and
-                              block_config.get('BlockPublicPolicy', False) and
-                              block_config.get('RestrictPublicBuckets', False))
+                all_blocked = (public_access_block.get('BlockPublicAcls', False) and 
+                              public_access_block.get('IgnorePublicAcls', False) and
+                              public_access_block.get('BlockPublicPolicy', False) and
+                              public_access_block.get('RestrictPublicBuckets', False))
                 
                 if all_blocked:
                     logger.debug(f"Bucket {bucket_name} protected by bucket-level public access blocks")
@@ -438,7 +471,7 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
         
         # Check bucket ACL for public access
         try:
-            acl = get_bucket_acl(bucket_name)
+            acl = get_bucket_acl(bucket_name, session_context=session_context)
             
             # Check for public grants in the ACL
             if acl and 'Grants' in acl:
@@ -456,13 +489,11 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
         
         # Check bucket policy for public access
         try:
-            policy = get_bucket_policy(bucket_name)
+            policy = get_bucket_policy(bucket_name, session_context=session_context)
             
-            if policy and 'Policy' in policy:
-                policy_json = json.loads(policy['Policy'])
-                
+            if policy:
                 # Simple check for public policy statements
-                for statement in policy_json.get('Statement', []):
+                for statement in policy.get('Statement', []):
                     principal = statement.get('Principal', {})
                     effect = statement.get('Effect', '')
                     
@@ -499,11 +530,12 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
         assessment['errors'].append(error_msg)
         return False, assessment
 
-def find_public_buckets(max_workers: int = 10) -> Dict[str, Any]:
+def find_public_buckets(max_workers: int = 10, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Find all public S3 buckets in the account.
 
     Args:
         max_workers: Maximum number of threads to use
+        session_context: Optional session key for cross-account access
 
     Returns:
         Dictionary with assessment results
@@ -513,7 +545,7 @@ def find_public_buckets(max_workers: int = 10) -> Dict[str, Any]:
         start_time = datetime.now()
         
         # Get account-level public access block settings first
-        account_public_access_block = get_account_public_access_block()
+        account_public_access_block = get_account_public_access_block(session_context)
         
         # Check if account-level blocks prevent public access entirely
         if account_public_access_block:
@@ -526,7 +558,7 @@ def find_public_buckets(max_workers: int = 10) -> Dict[str, Any]:
             if all_blocked:
                 logger.info("Account-level public access blocks prevent any buckets from being public")
                 # Just count buckets for reporting
-                all_buckets = list_buckets()
+                all_buckets = list_buckets(session_context)
                 total_buckets = len(all_buckets)
                 return {
                     'total_buckets': total_buckets,
@@ -539,7 +571,7 @@ def find_public_buckets(max_workers: int = 10) -> Dict[str, Any]:
                 }
         
         # List all buckets
-        all_buckets = list_buckets()
+        all_buckets = list_buckets(session_context)
         total_buckets = len(all_buckets)
         
         if total_buckets == 0:
@@ -572,7 +604,7 @@ def find_public_buckets(max_workers: int = 10) -> Dict[str, Any]:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Create a map of futures to buckets for this chunk
                 futures = {
-                    executor.submit(is_bucket_public, bucket['Name'], account_public_access_block): bucket
+                    executor.submit(is_bucket_public, bucket['Name'], account_public_access_block, session_context): bucket
                     for bucket in bucket_chunk
                 }
                 
@@ -623,7 +655,7 @@ def find_public_buckets(max_workers: int = 10) -> Dict[str, Any]:
             'scan_time_seconds': 0
         }
 
-def count_s3_buckets() -> Dict[str, Any]:
+def count_s3_buckets(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Count S3 buckets by region.
 
     Returns:
@@ -631,7 +663,7 @@ def count_s3_buckets() -> Dict[str, Any]:
     """
     try:
         # List all buckets
-        all_buckets = list_buckets()
+        all_buckets = list_buckets(session_context)
         total_buckets = len(all_buckets)
         
         # Get the region for each bucket
@@ -640,7 +672,7 @@ def count_s3_buckets() -> Dict[str, Any]:
         with ThreadPoolExecutor(max_workers=10) as executor:
             # Map bucket names to their regions
             bucket_to_region = {
-                bucket['Name']: executor.submit(get_bucket_location, bucket['Name'])
+                bucket['Name']: executor.submit(get_bucket_location, bucket['Name'], session_context)
                 for bucket in all_buckets
             }
             

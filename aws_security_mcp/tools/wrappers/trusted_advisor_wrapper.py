@@ -21,7 +21,7 @@ from aws_security_mcp.tools.trusted_advisor_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def trusted_advisor_security_operations(operation: str, **params) -> str:
+async def trusted_advisor_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Trusted Advisor Security Operations Hub - Comprehensive security recommendations and compliance monitoring.
     
     🔍 SECURITY CHECKS ANALYSIS:
@@ -50,6 +50,7 @@ async def trusted_advisor_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The Trusted Advisor operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access
         
         # Recommendation parameters:
         recommendation_id: ID of the specific recommendation to retrieve details or affected resources
@@ -66,11 +67,11 @@ async def trusted_advisor_security_operations(operation: str, **params) -> str:
     
     try:
         if operation == "get_security_checks":
-            result = await _get_trusted_advisor_security_checks()
+            result = await _get_trusted_advisor_security_checks(session_context=session_context)
             return json.dumps(result)
             
         elif operation == "list_security_recommendations":
-            result = await _list_trusted_advisor_security_recommendations()
+            result = await _list_trusted_advisor_security_recommendations(session_context=session_context)
             return json.dumps(result)
             
         elif operation == "get_recommendation_details":
@@ -82,7 +83,7 @@ async def trusted_advisor_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_recommendation_details', recommendation_id='recommendation-12345'"
                 })
             
-            result = await _get_trusted_advisor_recommendation_details(recommendation_id)
+            result = await _get_trusted_advisor_recommendation_details(recommendation_id, session_context=session_context)
             return json.dumps(result)
             
         elif operation == "list_affected_resources":
@@ -94,7 +95,7 @@ async def trusted_advisor_security_operations(operation: str, **params) -> str:
                     "usage": "operation='list_affected_resources', recommendation_id='recommendation-12345'"
                 })
             
-            result = await _list_trusted_advisor_affected_resources(recommendation_id)
+            result = await _list_trusted_advisor_affected_resources(recommendation_id, session_context=session_context)
             return json.dumps(result)
             
         else:
@@ -127,12 +128,15 @@ async def trusted_advisor_security_operations(operation: str, **params) -> str:
         })
 
 @register_tool()
-async def discover_trusted_advisor_operations() -> str:
+async def discover_trusted_advisor_operations(session_context: Optional[str] = None) -> str:
     """Discover all available Trusted Advisor operations with detailed usage examples.
     
     This tool provides comprehensive documentation of Trusted Advisor operations available
     through the trusted_advisor_security_operations tool, including parameter requirements
     and practical usage examples for security compliance monitoring.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         Detailed catalog of Trusted Advisor operations with examples and parameter descriptions

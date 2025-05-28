@@ -16,7 +16,7 @@ from aws_security_mcp.tools import register_tool
 # Configure logging
 logger = logging.getLogger(__name__)
 
-@register_tool()
+@register_tool("list_s3_buckets")
 async def list_s3_buckets(session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all S3 buckets in the AWS account with basic information.
 
@@ -52,7 +52,7 @@ async def list_s3_buckets(session_context: Optional[str] = None) -> Dict[str, An
             "error": str(e)
         }
 
-@register_tool()
+@register_tool("get_s3_bucket_details")
 async def get_s3_bucket_details(
     bucket_name: str,
     session_context: Optional[str] = None
@@ -117,7 +117,7 @@ async def get_bucket_details_async(bucket_name: str, session_context: Optional[s
     
     return bucket_details
 
-@register_tool()
+@register_tool("analyze_s3_bucket_security")
 async def analyze_s3_bucket_security(
     bucket_name: str,
     session_context: Optional[str] = None
@@ -187,7 +187,7 @@ async def analyze_s3_bucket_security(
             "scan_timestamp": datetime.utcnow().isoformat()
         }
 
-@register_tool()
+@register_tool("find_public_buckets")
 async def find_public_buckets(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Find all public S3 buckets in the AWS account.
 

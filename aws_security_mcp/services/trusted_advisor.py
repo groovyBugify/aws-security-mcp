@@ -14,14 +14,17 @@ logger = logging.getLogger(__name__)
 # Security check categories - we'll filter for these
 SECURITY_CATEGORIES = ["security", "fault_tolerance"]
 
-async def get_security_checks() -> Dict[str, Any]:
+async def get_security_checks(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Retrieve all security-related checks from Trusted Advisor.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         Dict containing security checks or error information
     """
     try:
-        client = get_client('trustedadvisor')
+        client = get_client('trustedadvisor', session_context=session_context)
         
         # Get all checks and filter for security categories
         paginator = client.get_paginator('list_checks')
@@ -53,17 +56,18 @@ async def get_security_checks() -> Dict[str, Any]:
             "count": 0
         }
 
-async def get_recommendation_details(recommendation_id: str) -> Dict[str, Any]:
+async def get_recommendation_details(recommendation_id: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get details for a specific security recommendation.
     
     Args:
         recommendation_id: The ID of the recommendation
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict containing recommendation details or error information
     """
     try:
-        client = get_client('trustedadvisor')
+        client = get_client('trustedadvisor', session_context=session_context)
         
         response = client.get_recommendation(
             recommendationId=recommendation_id
@@ -82,14 +86,17 @@ async def get_recommendation_details(recommendation_id: str) -> Dict[str, Any]:
             "recommendation": {}
         }
 
-async def list_security_recommendations() -> Dict[str, Any]:
+async def list_security_recommendations(session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all security recommendations from Trusted Advisor.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         Dict containing security recommendations or error information
     """
     try:
-        client = get_client('trustedadvisor')
+        client = get_client('trustedadvisor', session_context=session_context)
         
         # Use the paginator to handle large result sets
         paginator = client.get_paginator('list_recommendations')
@@ -121,17 +128,18 @@ async def list_security_recommendations() -> Dict[str, Any]:
             "count": 0
         }
 
-async def list_recommendation_resources(recommendation_id: str) -> Dict[str, Any]:
+async def list_recommendation_resources(recommendation_id: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all resources affected by a specific security recommendation.
     
     Args:
         recommendation_id: The ID of the recommendation
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict containing affected resources or error information
     """
     try:
-        client = get_client('trustedadvisor')
+        client = get_client('trustedadvisor', session_context=session_context)
         
         # Use the paginator to handle large result sets
         paginator = client.get_paginator('list_recommendation_resources')

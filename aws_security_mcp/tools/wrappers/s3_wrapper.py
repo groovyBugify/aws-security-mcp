@@ -21,7 +21,7 @@ from aws_security_mcp.tools.s3_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def s3_security_operations(operation: str, **params) -> str:
+async def s3_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """S3 Security Operations Hub - Comprehensive AWS S3 storage security monitoring.
     
     🪣 BUCKET MANAGEMENT:
@@ -48,6 +48,7 @@ async def s3_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The S3 operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access
         
         # Bucket parameters:
         bucket_name: S3 bucket name (required for bucket-specific operations)
@@ -64,7 +65,7 @@ async def s3_security_operations(operation: str, **params) -> str:
     
     try:
         if operation == "list_buckets":
-            return json.dumps(await _list_s3_buckets())
+            return json.dumps(await _list_s3_buckets(session_context=session_context))
             
         elif operation == "get_bucket_details":
             bucket_name = params.get("bucket_name")
@@ -74,7 +75,7 @@ async def s3_security_operations(operation: str, **params) -> str:
                     "usage": "operation='get_bucket_details', bucket_name='my-bucket'"
                 })
             
-            return json.dumps(await _get_s3_bucket_details(bucket_name=bucket_name))
+            return json.dumps(await _get_s3_bucket_details(bucket_name=bucket_name, session_context=session_context))
             
         elif operation == "analyze_bucket_security":
             bucket_name = params.get("bucket_name")
@@ -84,10 +85,10 @@ async def s3_security_operations(operation: str, **params) -> str:
                     "usage": "operation='analyze_bucket_security', bucket_name='my-bucket'"
                 })
             
-            return json.dumps(await _analyze_s3_bucket_security(bucket_name=bucket_name))
+            return json.dumps(await _analyze_s3_bucket_security(bucket_name=bucket_name, session_context=session_context))
             
         elif operation == "find_public_buckets":
-            return json.dumps(await _find_public_buckets())
+            return json.dumps(await _find_public_buckets(session_context=session_context))
             
         else:
             # Provide helpful error with available operations
@@ -119,7 +120,7 @@ async def s3_security_operations(operation: str, **params) -> str:
         })
 
 @register_tool()
-async def discover_s3_operations() -> str:
+async def discover_s3_operations(session_context: Optional[str] = None) -> str:
     """Discover all available AWS S3 operations with detailed usage examples.
     
     This tool provides comprehensive documentation of S3 operations available

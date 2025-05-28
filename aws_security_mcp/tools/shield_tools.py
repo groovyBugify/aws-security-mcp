@@ -18,7 +18,7 @@ from aws_security_mcp.formatters.shield import (
     format_shield_drt_access_json,
     format_shield_emergency_contacts_json
 )
-from aws_security_mcp.services.shield import ShieldService
+from aws_security_mcp.services import shield
 from aws_security_mcp.tools import register_tool
 
 # Configure logging
@@ -26,18 +26,19 @@ logger = logging.getLogger(__name__)
 
 
 @register_tool()
-async def get_shield_subscription_status() -> Dict[str, Any]:
+async def get_shield_subscription_status(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get the status of AWS Shield Advanced subscription.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         JSON object with subscription information
     """
     logger.info("Getting Shield Advanced subscription status")
     
-    shield_service = ShieldService()
-    
     try:
-        subscription = await shield_service.get_subscription_state()
+        subscription = await shield.get_subscription_state(session_context=session_context)
         return format_shield_subscription_json(subscription)
     except Exception as e:
         logger.error(f"Error getting Shield subscription status: {e}")
@@ -51,23 +52,23 @@ async def get_shield_subscription_status() -> Dict[str, Any]:
 @register_tool()
 async def list_shield_protected_resources(
     limit: int = 100,
-    next_token: Optional[str] = None
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List resources protected by AWS Shield Advanced.
     
     Args:
         limit: Maximum number of protected resources to return
         next_token: Pagination token for fetching the next set of resources
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON object with protected resource information
     """
     logger.info(f"Listing Shield protected resources with limit: {limit}")
     
-    shield_service = ShieldService()
-    
     try:
-        response = await shield_service.list_protected_resources(max_items=limit, next_token=next_token)
+        response = await shield.list_protected_resources(max_items=limit, next_token=next_token, session_context=session_context)
         resources = response['protected_resources']
         
         # Format the results
@@ -106,23 +107,23 @@ async def list_shield_protected_resources(
 @register_tool()
 async def list_shield_protections(
     limit: int = 100,
-    next_token: Optional[str] = None
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List protections configured in AWS Shield Advanced.
     
     Args:
         limit: Maximum number of protections to return
         next_token: Pagination token for fetching the next set of protections
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON object with protection information
     """
     logger.info(f"Listing Shield protections with limit: {limit}")
     
-    shield_service = ShieldService()
-    
     try:
-        response = await shield_service.list_protections(max_items=limit, next_token=next_token)
+        response = await shield.list_protections(max_items=limit, next_token=next_token, session_context=session_context)
         protections = response['protections']
         
         # Format the results
@@ -149,21 +150,20 @@ async def list_shield_protections(
 
 
 @register_tool()
-async def get_shield_protection_details(resource_arn: str) -> Dict[str, Any]:
+async def get_shield_protection_details(resource_arn: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed protection information for a specific resource in AWS Shield Advanced.
     
     Args:
         resource_arn: ARN of the resource to get protection details for
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON object with detailed protection information
     """
     logger.info(f"Getting Shield protection details for resource: {resource_arn}")
     
-    shield_service = ShieldService()
-    
     try:
-        protection = await shield_service.get_protection_details(resource_arn=resource_arn)
+        protection = await shield.get_protection_details(resource_arn=resource_arn, session_context=session_context)
         
         if not protection:
             return {
@@ -189,7 +189,8 @@ async def get_shield_protection_details(resource_arn: str) -> Dict[str, Any]:
 async def list_shield_attacks(
     days: int = 30,
     limit: int = 100,
-    next_token: Optional[str] = None
+    next_token: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List DDoS attacks detected by AWS Shield Advanced.
     
@@ -197,13 +198,12 @@ async def list_shield_attacks(
         days: Number of days to look back for attacks
         limit: Maximum number of attacks to return
         next_token: Pagination token for fetching the next set of attacks
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON object with attack information
     """
     logger.info(f"Listing Shield attacks for the last {days} days with limit: {limit}")
-    
-    shield_service = ShieldService()
     
     try:
         # Calculate start and end times for the attack listing
@@ -215,10 +215,11 @@ async def list_shield_attacks(
             'ToExclusive': end_time
         }
         
-        response = await shield_service.list_attacks(
+        response = await shield.list_attacks(
             start_time=time_range,
             max_items=limit,
-            next_token=next_token
+            next_token=next_token,
+            session_context=session_context
         )
         attacks = response['attacks']
         
@@ -264,21 +265,20 @@ async def list_shield_attacks(
 
 
 @register_tool()
-async def get_shield_attack_details(attack_id: str) -> Dict[str, Any]:
+async def get_shield_attack_details(attack_id: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific DDoS attack detected by AWS Shield Advanced.
     
     Args:
         attack_id: ID of the attack to get details for
+        session_context: Optional session key for cross-account access
         
     Returns:
         JSON object with detailed attack information
     """
     logger.info(f"Getting Shield attack details for attack ID: {attack_id}")
     
-    shield_service = ShieldService()
-    
     try:
-        attack = await shield_service.get_attack_details(attack_id=attack_id)
+        attack = await shield.get_attack_details(attack_id=attack_id, session_context=session_context)
         return format_shield_attack_json(attack)
     except Exception as e:
         logger.error(f"Error getting Shield attack details: {e}")
@@ -290,18 +290,19 @@ async def get_shield_attack_details(attack_id: str) -> Dict[str, Any]:
 
 
 @register_tool()
-async def get_shield_drt_access_status() -> Dict[str, Any]:
+async def get_shield_drt_access_status(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get the status of DDoS Response Team (DRT) access in AWS Shield Advanced.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         JSON object with DRT access information
     """
     logger.info("Getting Shield DRT access status")
     
-    shield_service = ShieldService()
-    
     try:
-        drt_access = await shield_service.get_drt_access()
+        drt_access = await shield.get_drt_access(session_context=session_context)
         return format_shield_drt_access_json(drt_access)
     except Exception as e:
         logger.error(f"Error getting Shield DRT access status: {e}")
@@ -313,18 +314,19 @@ async def get_shield_drt_access_status() -> Dict[str, Any]:
 
 
 @register_tool()
-async def get_shield_emergency_contacts() -> Dict[str, Any]:
+async def get_shield_emergency_contacts(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get the emergency contacts configured for AWS Shield Advanced.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         JSON object with emergency contact information
     """
     logger.info("Getting Shield emergency contacts")
     
-    shield_service = ShieldService()
-    
     try:
-        contacts = await shield_service.describe_emergency_contact_list()
+        contacts = await shield.describe_emergency_contact_list(session_context=session_context)
         return format_shield_emergency_contacts_json(contacts)
     except Exception as e:
         logger.error(f"Error getting Shield emergency contacts: {e}")
@@ -337,19 +339,20 @@ async def get_shield_emergency_contacts() -> Dict[str, Any]:
 
 
 @register_tool()
-async def get_shield_summary() -> Dict[str, Any]:
+async def get_shield_summary(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get a comprehensive summary of AWS Shield Advanced status and configuration.
+    
+    Args:
+        session_context: Optional session key for cross-account access
     
     Returns:
         JSON object with Shield Advanced summary information
     """
     logger.info("Getting Shield Advanced summary")
     
-    shield_service = ShieldService()
-    
     try:
         # Get subscription status
-        subscription = await shield_service.get_subscription_state()
+        subscription = await shield.get_subscription_state(session_context=session_context)
         subscription_status = format_shield_subscription_json(subscription)
         
         # Early exit if no subscription
@@ -360,7 +363,7 @@ async def get_shield_summary() -> Dict[str, Any]:
             }
         
         # Get protected resources (limit to 100 for summary)
-        protected_resources_response = await shield_service.list_protected_resources(max_items=100)
+        protected_resources_response = await shield.list_protected_resources(max_items=100, session_context=session_context)
         protected_resources = protected_resources_response['protected_resources']
         formatted_resources = [format_shield_protected_resource_json(resource) for resource in protected_resources]
         
@@ -381,7 +384,7 @@ async def get_shield_summary() -> Dict[str, Any]:
             'ToExclusive': end_time
         }
         
-        attacks_response = await shield_service.list_attacks(start_time=time_range, max_items=100)
+        attacks_response = await shield.list_attacks(start_time=time_range, max_items=100, session_context=session_context)
         attacks = attacks_response['attacks']
         formatted_attacks = [format_shield_attack_summary_json(attack) for attack in attacks]
         
@@ -389,11 +392,11 @@ async def get_shield_summary() -> Dict[str, Any]:
         ongoing_attacks = [a for a in formatted_attacks if a['attack_status'] == 'In Progress']
         
         # Get DRT access status
-        drt_access = await shield_service.get_drt_access()
+        drt_access = await shield.get_drt_access(session_context=session_context)
         drt_status = format_shield_drt_access_json(drt_access)
         
         # Get emergency contacts
-        contacts = await shield_service.describe_emergency_contact_list()
+        contacts = await shield.describe_emergency_contact_list(session_context=session_context)
         contact_info = format_shield_emergency_contacts_json(contacts)
         
         # Assemble summary

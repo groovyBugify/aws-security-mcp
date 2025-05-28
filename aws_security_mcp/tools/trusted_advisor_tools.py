@@ -9,17 +9,20 @@ from aws_security_mcp.tools import register_tool
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def get_trusted_advisor_security_checks() -> Dict[str, Any]:
+async def get_trusted_advisor_security_checks(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get all security-related checks from AWS Trusted Advisor.
     
     This tool retrieves all security and fault tolerance checks available in AWS Trusted Advisor.
     Security checks help identify vulnerabilities and security risks in your AWS environment.
     
+    Args:
+        session_context: Optional session key for cross-account access
+    
     Returns:
         Dict containing security checks information
     """
     logger.info("Getting Trusted Advisor security checks")
-    result = await trusted_advisor.get_security_checks()
+    result = await trusted_advisor.get_security_checks(session_context=session_context)
     
     # Format the response to focus on security details
     if result["success"]:
@@ -43,18 +46,21 @@ async def get_trusted_advisor_security_checks() -> Dict[str, Any]:
     return result
 
 @register_tool()
-async def list_trusted_advisor_security_recommendations() -> Dict[str, Any]:
+async def list_trusted_advisor_security_recommendations(session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all security recommendations from AWS Trusted Advisor.
     
     This tool retrieves security-focused recommendations that help you follow AWS
     best practices for security and compliance. These recommendations identify
     potential vulnerabilities and suggest mitigations.
     
+    Args:
+        session_context: Optional session key for cross-account access
+    
     Returns:
         Dict containing security recommendations information
     """
     logger.info("Listing Trusted Advisor security recommendations")
-    result = await trusted_advisor.list_security_recommendations()
+    result = await trusted_advisor.list_security_recommendations(session_context=session_context)
     
     # Format the response to focus on security details
     if result["success"]:
@@ -76,7 +82,7 @@ async def list_trusted_advisor_security_recommendations() -> Dict[str, Any]:
     return result
 
 @register_tool()
-async def get_trusted_advisor_recommendation_details(recommendation_id: str) -> Dict[str, Any]:
+async def get_trusted_advisor_recommendation_details(recommendation_id: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific Trusted Advisor security recommendation.
     
     This tool provides comprehensive details about a security recommendation,
@@ -84,12 +90,13 @@ async def get_trusted_advisor_recommendation_details(recommendation_id: str) -> 
     
     Args:
         recommendation_id: The ID of the recommendation to retrieve
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict containing recommendation details
     """
     logger.info(f"Getting details for Trusted Advisor recommendation: {recommendation_id}")
-    result = await trusted_advisor.get_recommendation_details(recommendation_id)
+    result = await trusted_advisor.get_recommendation_details(recommendation_id, session_context=session_context)
     
     # Format the response to focus on security details
     if result["success"]:
@@ -113,7 +120,7 @@ async def get_trusted_advisor_recommendation_details(recommendation_id: str) -> 
     return result
 
 @register_tool()
-async def list_trusted_advisor_affected_resources(recommendation_id: str) -> Dict[str, Any]:
+async def list_trusted_advisor_affected_resources(recommendation_id: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """List resources affected by a specific Trusted Advisor security recommendation.
     
     This tool retrieves all AWS resources that are flagged by a particular security
@@ -121,12 +128,13 @@ async def list_trusted_advisor_affected_resources(recommendation_id: str) -> Dic
     
     Args:
         recommendation_id: The ID of the recommendation
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict containing affected resources information
     """
     logger.info(f"Listing affected resources for Trusted Advisor recommendation: {recommendation_id}")
-    result = await trusted_advisor.list_recommendation_resources(recommendation_id)
+    result = await trusted_advisor.list_recommendation_resources(recommendation_id, session_context=session_context)
     
     # Format the response to focus on security details
     if result["success"]:
