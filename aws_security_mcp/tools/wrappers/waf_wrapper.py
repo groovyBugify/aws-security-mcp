@@ -75,16 +75,19 @@ async def waf_security_operations(operation: str, session_context: Optional[str]
         elif operation == "get_web_acl_details":
             web_acl_id = params.get('web_acl_id')
             web_acl_name = params.get('web_acl_name')
+            web_acl_arn = params.get('web_acl_arn')
             scope = params.get('scope', 'REGIONAL')
             
-            if not web_acl_id or not web_acl_name:
+            # Check if we have valid parameters
+            if not web_acl_arn and not (web_acl_id and web_acl_name):
                 return json.dumps({
-                    "error": "Both web_acl_id and web_acl_name are required for get_web_acl_details"
+                    "error": "Either web_acl_arn must be provided, or both web_acl_id and web_acl_name must be provided for get_web_acl_details"
                 })
             
             result = await waf.get_web_acl(
                 web_acl_id=web_acl_id,
                 web_acl_name=web_acl_name,
+                web_acl_arn=web_acl_arn,
                 scope=scope,
                 session_context=session_context
             )
@@ -127,16 +130,19 @@ async def waf_security_operations(operation: str, session_context: Optional[str]
         elif operation == "get_ip_set_details":
             ip_set_id = params.get('ip_set_id')
             ip_set_name = params.get('ip_set_name')
+            ip_set_arn = params.get('ip_set_arn')
             scope = params.get('scope', 'REGIONAL')
             
-            if not ip_set_id or not ip_set_name:
+            # Check if we have valid parameters
+            if not ip_set_arn and not (ip_set_id and ip_set_name):
                 return json.dumps({
-                    "error": "Both ip_set_id and ip_set_name are required for get_ip_set_details"
+                    "error": "Either ip_set_arn must be provided, or both ip_set_id and ip_set_name must be provided for get_ip_set_details"
                 })
             
             result = await waf.get_ip_set(
                 ip_set_id=ip_set_id,
                 ip_set_name=ip_set_name,
+                ip_set_arn=ip_set_arn,
                 scope=scope,
                 session_context=session_context
             )
@@ -179,16 +185,19 @@ async def waf_security_operations(operation: str, session_context: Optional[str]
         elif operation == "get_rule_group_details":
             rule_group_id = params.get('rule_group_id')
             rule_group_name = params.get('rule_group_name')
+            rule_group_arn = params.get('rule_group_arn')
             scope = params.get('scope', 'REGIONAL')
             
-            if not rule_group_id or not rule_group_name:
+            # Check if we have valid parameters
+            if not rule_group_arn and not (rule_group_id and rule_group_name):
                 return json.dumps({
-                    "error": "Both rule_group_id and rule_group_name are required for get_rule_group_details"
+                    "error": "Either rule_group_arn must be provided, or both rule_group_id and rule_group_name must be provided for get_rule_group_details"
                 })
             
             result = await waf.get_rule_group(
                 rule_group_id=rule_group_id,
                 rule_group_name=rule_group_name,
+                rule_group_arn=rule_group_arn,
                 scope=scope,
                 session_context=session_context
             )
@@ -329,16 +338,29 @@ async def discover_waf_operations(session_context: Optional[str] = None) -> str:
                 "get_web_acl_details": {
                     "description": "Get detailed Web ACL configuration and rules",
                     "parameters": {
-                        "web_acl_id": "Required - Web ACL ID",
-                        "web_acl_name": "Required - Web ACL name",
+                        "Option 1 - Using ID and Name": {
+                            "web_acl_id": "Required - Web ACL ID",
+                            "web_acl_name": "Required - Web ACL name"
+                        },
+                        "Option 2 - Using ARN": {
+                            "web_acl_arn": "Required - Web ACL ARN"
+                        },
                         "scope": "REGIONAL or CLOUDFRONT (default: REGIONAL)"
                     },
-                    "example": {
-                        "operation": "get_web_acl_details",
-                        "web_acl_id": "12345678-1234-1234-1234-123456789012",
-                        "web_acl_name": "MyWebACL",
-                        "scope": "REGIONAL"
-                    }
+                    "examples": [
+                        {
+                            "description": "Using ID and name",
+                            "operation": "get_web_acl_details",
+                            "web_acl_id": "12345678-1234-1234-1234-123456789012",
+                            "web_acl_name": "MyWebACL",
+                            "scope": "REGIONAL"
+                        },
+                        {
+                            "description": "Using ARN",
+                            "operation": "get_web_acl_details",
+                            "web_acl_arn": "arn:aws:wafv2:us-east-1:123456789012:regional/webacl/MyWebACL/12345678-1234-1234-1234-123456789012"
+                        }
+                    ]
                 },
                 "list_ip_sets": {
                     "description": "List WAF IP sets for access control",
@@ -355,15 +377,28 @@ async def discover_waf_operations(session_context: Optional[str] = None) -> str:
                 "get_ip_set_details": {
                     "description": "Get detailed IP set configuration and addresses",
                     "parameters": {
-                        "ip_set_id": "Required - IP set ID",
-                        "ip_set_name": "Required - IP set name",
+                        "Option 1 - Using ID and Name": {
+                            "ip_set_id": "Required - IP set ID",
+                            "ip_set_name": "Required - IP set name"
+                        },
+                        "Option 2 - Using ARN": {
+                            "ip_set_arn": "Required - IP set ARN"
+                        },
                         "scope": "REGIONAL or CLOUDFRONT (default: REGIONAL)"
                     },
-                    "example": {
-                        "operation": "get_ip_set_details",
-                        "ip_set_id": "12345678-1234-1234-1234-123456789012",
-                        "ip_set_name": "BlockedIPs"
-                    }
+                    "examples": [
+                        {
+                            "description": "Using ID and name",
+                            "operation": "get_ip_set_details",
+                            "ip_set_id": "12345678-1234-1234-1234-123456789012",
+                            "ip_set_name": "BlockedIPs"
+                        },
+                        {
+                            "description": "Using ARN",
+                            "operation": "get_ip_set_details",
+                            "ip_set_arn": "arn:aws:wafv2:us-east-1:123456789012:regional/ipset/BlockedIPs/12345678-1234-1234-1234-123456789012"
+                        }
+                    ]
                 },
                 "list_rule_groups": {
                     "description": "List WAF rule groups and managed rules",
@@ -380,15 +415,28 @@ async def discover_waf_operations(session_context: Optional[str] = None) -> str:
                 "get_rule_group_details": {
                     "description": "Get detailed rule group configuration and rules",
                     "parameters": {
-                        "rule_group_id": "Required - Rule group ID",
-                        "rule_group_name": "Required - Rule group name",
+                        "Option 1 - Using ID and Name": {
+                            "rule_group_id": "Required - Rule group ID",
+                            "rule_group_name": "Required - Rule group name"
+                        },
+                        "Option 2 - Using ARN": {
+                            "rule_group_arn": "Required - Rule group ARN"
+                        },
                         "scope": "REGIONAL or CLOUDFRONT (default: REGIONAL)"
                     },
-                    "example": {
-                        "operation": "get_rule_group_details",
-                        "rule_group_id": "12345678-1234-1234-1234-123456789012",
-                        "rule_group_name": "CustomRules"
-                    }
+                    "examples": [
+                        {
+                            "description": "Using ID and name",
+                            "operation": "get_rule_group_details",
+                            "rule_group_id": "12345678-1234-1234-1234-123456789012",
+                            "rule_group_name": "CustomRules"
+                        },
+                        {
+                            "description": "Using ARN",
+                            "operation": "get_rule_group_details",
+                            "rule_group_arn": "arn:aws:wafv2:us-east-1:123456789012:regional/rulegroup/CustomRules/12345678-1234-1234-1234-123456789012"
+                        }
+                    ]
                 },
                 "list_protected_resources": {
                     "description": "List resources protected by a Web ACL",

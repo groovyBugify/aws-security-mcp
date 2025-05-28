@@ -136,79 +136,112 @@ async def list_rule_groups(scope: str = 'REGIONAL', max_items: int = 100, next_m
         logger.error(f"Error listing WAFv2 rule groups: {e}")
         raise
 
-async def get_web_acl(web_acl_id: str, web_acl_name: str, scope: str = 'REGIONAL', session_context: Optional[str] = None) -> Dict[str, Any]:
+async def get_web_acl(web_acl_id: Optional[str] = None, web_acl_name: Optional[str] = None, web_acl_arn: Optional[str] = None, scope: str = 'REGIONAL', session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get details of a specific WAFv2 Web ACL.
 
     Args:
-        web_acl_id: The ID of the Web ACL
-        web_acl_name: The name of the Web ACL
+        web_acl_id: The ID of the Web ACL (optional if ARN is provided)
+        web_acl_name: The name of the Web ACL (optional if ARN is provided)
+        web_acl_arn: The ARN of the Web ACL (alternative to ID/name)
         scope: The scope of the Web ACL. Valid values are 'REGIONAL' or 'CLOUDFRONT'
         session_context: Optional session key for cross-account access
 
     Returns:
         Dictionary containing detailed Web ACL information
+        
+    Raises:
+        ValueError: If neither ARN nor both ID and name are provided
     """
     try:
         client = get_wafv2_client(session_context=session_context)
         
-        response = client.get_web_acl(
-            Name=web_acl_name,
-            Id=web_acl_id,
-            Scope=scope
-        )
+        # Build parameters based on what's provided
+        params = {'Scope': scope}
+        
+        if web_acl_arn:
+            params['ARN'] = web_acl_arn
+        elif web_acl_id and web_acl_name:
+            params['Id'] = web_acl_id
+            params['Name'] = web_acl_name
+        else:
+            raise ValueError("Either web_acl_arn must be provided, or both web_acl_id and web_acl_name must be provided")
+        
+        response = client.get_web_acl(**params)
         return response.get('WebACL', {})
     except ClientError as e:
-        logger.error(f"Error getting WAFv2 Web ACL {web_acl_name}: {e}")
+        logger.error(f"Error getting WAFv2 Web ACL: {e}")
         raise
 
-async def get_ip_set(ip_set_id: str, ip_set_name: str, scope: str = 'REGIONAL', session_context: Optional[str] = None) -> Dict[str, Any]:
+async def get_ip_set(ip_set_id: Optional[str] = None, ip_set_name: Optional[str] = None, ip_set_arn: Optional[str] = None, scope: str = 'REGIONAL', session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get details of a specific WAFv2 IP set.
 
     Args:
-        ip_set_id: The ID of the IP set
-        ip_set_name: The name of the IP set
+        ip_set_id: The ID of the IP set (optional if ARN is provided)
+        ip_set_name: The name of the IP set (optional if ARN is provided)
+        ip_set_arn: The ARN of the IP set (alternative to ID/name)
         scope: The scope of the IP set. Valid values are 'REGIONAL' or 'CLOUDFRONT'
         session_context: Optional session key for cross-account access
 
     Returns:
         Dictionary containing detailed IP set information
+        
+    Raises:
+        ValueError: If neither ARN nor both ID and name are provided
     """
     try:
         client = get_wafv2_client(session_context=session_context)
         
-        response = client.get_ip_set(
-            Name=ip_set_name,
-            Id=ip_set_id,
-            Scope=scope
-        )
+        # Build parameters based on what's provided
+        params = {'Scope': scope}
+        
+        if ip_set_arn:
+            params['ARN'] = ip_set_arn
+        elif ip_set_id and ip_set_name:
+            params['Id'] = ip_set_id
+            params['Name'] = ip_set_name
+        else:
+            raise ValueError("Either ip_set_arn must be provided, or both ip_set_id and ip_set_name must be provided")
+        
+        response = client.get_ip_set(**params)
         return response.get('IPSet', {})
     except ClientError as e:
-        logger.error(f"Error getting WAFv2 IP set {ip_set_name}: {e}")
+        logger.error(f"Error getting WAFv2 IP set: {e}")
         raise
 
-async def get_rule_group(rule_group_id: str, rule_group_name: str, scope: str = 'REGIONAL', session_context: Optional[str] = None) -> Dict[str, Any]:
+async def get_rule_group(rule_group_id: Optional[str] = None, rule_group_name: Optional[str] = None, rule_group_arn: Optional[str] = None, scope: str = 'REGIONAL', session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get details of a specific WAFv2 rule group.
 
     Args:
-        rule_group_id: The ID of the rule group
-        rule_group_name: The name of the rule group
+        rule_group_id: The ID of the rule group (optional if ARN is provided)
+        rule_group_name: The name of the rule group (optional if ARN is provided)
+        rule_group_arn: The ARN of the rule group (alternative to ID/name)
         scope: The scope of the rule group. Valid values are 'REGIONAL' or 'CLOUDFRONT'
         session_context: Optional session key for cross-account access
 
     Returns:
         Dictionary containing detailed rule group information
+        
+    Raises:
+        ValueError: If neither ARN nor both ID and name are provided
     """
     try:
         client = get_wafv2_client(session_context=session_context)
         
-        response = client.get_rule_group(
-            Name=rule_group_name,
-            Id=rule_group_id,
-            Scope=scope
-        )
+        # Build parameters based on what's provided
+        params = {'Scope': scope}
+        
+        if rule_group_arn:
+            params['ARN'] = rule_group_arn
+        elif rule_group_id and rule_group_name:
+            params['Id'] = rule_group_id
+            params['Name'] = rule_group_name
+        else:
+            raise ValueError("Either rule_group_arn must be provided, or both rule_group_id and rule_group_name must be provided")
+        
+        response = client.get_rule_group(**params)
         return response.get('RuleGroup', {})
     except ClientError as e:
-        logger.error(f"Error getting WAFv2 rule group {rule_group_name}: {e}")
+        logger.error(f"Error getting WAFv2 rule group: {e}")
         raise
 
 async def list_resources_for_web_acl(web_acl_arn: str, resource_type: str = 'APPLICATION_LOAD_BALANCER', session_context: Optional[str] = None) -> List[str]:
