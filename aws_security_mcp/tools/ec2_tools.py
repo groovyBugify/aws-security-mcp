@@ -31,7 +31,7 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 
 @register_tool()
-async def list_ec2_instances(limit: Optional[int] = None, search_term: str = "", state: str = "running", next_token: Optional[str] = None) -> str:
+async def list_ec2_instances(limit: Optional[int] = None, search_term: str = "", state: str = "running", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List EC2 instances with details.
     
     Args:
@@ -39,14 +39,15 @@ async def list_ec2_instances(limit: Optional[int] = None, search_term: str = "",
         search_term: Optional search term to filter instances by name, ID, or type
         state: Instance state to filter by (default is "running"). Set to empty string to show all states.
         next_token: Pagination token from a previous request (optional)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with EC2 instance information
     """
-    logger.info(f"Listing EC2 instances (limit={limit}, search_term='{search_term}', state='{state}', next_token={next_token})")
+    logger.info(f"Listing EC2 instances (limit={limit}, search_term='{search_term}', state='{state}', next_token={next_token}, session_context={session_context})")
     
     try:
-        ec2_client = get_client("ec2")
+        ec2_client = get_client("ec2", session_context=session_context)
         
         # Prepare parameters for the API call
         kwargs = {}
@@ -167,25 +168,26 @@ async def list_ec2_instances(limit: Optional[int] = None, search_term: str = "",
 
 
 @register_tool()
-async def count_ec2_instances(state: str = "", has_public_access: Optional[bool] = None, port: Optional[int] = None) -> str:
+async def count_ec2_instances(state: str = "", has_public_access: Optional[bool] = None, port: Optional[int] = None, session_context: Optional[str] = None) -> str:
     """Count EC2 instances, optionally filtering by state and security group rules.
     
     Args:
         state: Optional instance state to filter by (e.g., running, stopped, terminated)
         has_public_access: If set, only count instances with (True) or without (False) public internet access
         port: Optional specific port to check for access (e.g., 22 for SSH)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with instance count information
     """
-    logger.info(f"Counting EC2 instances (state='{state}', has_public_access={has_public_access}, port={port})")
+    logger.info(f"Counting EC2 instances (state='{state}', has_public_access={has_public_access}, port={port}, session_context={session_context})")
     
     try:
         # Handle state filtering - convert single string state to list if provided
         states = [state] if state else None
         
-        # Get all instances with state filtering
-        all_instances = ec2.get_all_instances(max_items=None, states=states)
+        # Get all instances with state filtering - pass session_context to ec2 service calls
+        all_instances = ec2.get_all_instances(max_items=None, states=states, session_context=session_context)
         
         # If we're not filtering by public access, return the count now
         if has_public_access is None and port is None:
@@ -205,7 +207,7 @@ async def count_ec2_instances(state: str = "", has_public_access: Optional[bool]
                 return json.dumps({"summary": result})
         
         # We need to check for public access, so get security groups
-        all_security_groups = ec2.get_all_security_groups(max_items=None)
+        all_security_groups = ec2.get_all_security_groups(max_items=None, session_context=session_context)
         
         # Create lookup dictionary for security groups
         sg_dict = {sg.get('GroupId'): sg for sg in all_security_groups}
@@ -299,7 +301,7 @@ async def count_ec2_instances(state: str = "", has_public_access: Optional[bool]
 
 
 @register_tool()
-async def list_security_groups(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None) -> str:
+async def list_security_groups(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List EC2 security groups with details.
     
     Args:
@@ -311,17 +313,19 @@ async def list_security_groups(limit: Optional[int] = None, search_term: str = "
             - public:true - Find security groups open to the internet (0.0.0.0/0)
             - cidr:X.X.X.X/X - Find security groups allowing specific CIDR range
         next_token: Pagination token from a previous request (optional)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with security group information
     """
-    logger.info(f"Listing security groups (limit={limit}, search_term='{search_term}', next_token={next_token})")
+    logger.info(f"Listing security groups (limit={limit}, search_term='{search_term}', next_token={next_token}, session_context={session_context})")
     
     try:
         if next_token:
             # If next_token is provided, we're requesting a specific page
             response = ec2.describe_security_groups(
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
             security_groups = response.get('SecurityGroups', [])
@@ -329,7 +333,8 @@ async def list_security_groups(limit: Optional[int] = None, search_term: str = "
             # Apply text search filter if provided
             if search_term:
                 security_groups = ec2.filter_security_groups_by_text(
-                    search_term=search_term
+                    search_term=search_term,
+                    session_context=session_context
                 )
                 
             next_token_value = response.get('NextToken')
@@ -338,12 +343,13 @@ async def list_security_groups(limit: Optional[int] = None, search_term: str = "
             if search_term:
                 # Special search syntax handling is done in filter_security_groups_by_text
                 security_groups = ec2.filter_security_groups_by_text(
-                    search_term=search_term
+                    search_term=search_term,
+                    session_context=session_context
                 )
                 next_token_value = None
             else:
                 # Get all security groups if no search term
-                response = ec2.describe_security_groups()
+                response = ec2.describe_security_groups(session_context=session_context)
                 security_groups = response.get('SecurityGroups', [])
                 next_token_value = response.get('NextToken')
         
@@ -589,21 +595,22 @@ async def list_security_groups(limit: Optional[int] = None, search_term: str = "
 
 
 @register_tool()
-async def list_vpcs(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None) -> str:
+async def list_vpcs(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List VPCs with details.
     
     Args:
         limit: Maximum number of VPCs to return (None for all)
         search_term: Optional search term to filter VPCs by ID or CIDR
         next_token: Optional pagination token for fetching next page of results
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with VPC information
     """
-    logger.info(f"Listing VPCs (limit={limit}, search_term='{search_term}', next_token={next_token})")
+    logger.info(f"Listing VPCs (limit={limit}, search_term='{search_term}', next_token={next_token}, session_context={session_context})")
     
     try:
-        ec2_client = get_client("ec2")
+        ec2_client = get_client("ec2", session_context=session_context)
         
         # Prepare parameters for the API call
         kwargs = {}
@@ -682,21 +689,22 @@ async def list_vpcs(limit: Optional[int] = None, search_term: str = "", next_tok
 
 
 @register_tool()
-async def list_route_tables(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None) -> str:
+async def list_route_tables(limit: Optional[int] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List route tables with details.
     
     Args:
         limit: Maximum number of route tables to return (None for all)
         search_term: Optional search term to filter route tables by ID or VPC ID
         next_token: Optional pagination token for fetching next page of results
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with route table information
     """
-    logger.info(f"Listing route tables (limit={limit}, search_term='{search_term}', next_token={next_token})")
+    logger.info(f"Listing route tables (limit={limit}, search_term='{search_term}', next_token={next_token}, session_context={session_context})")
     
     try:
-        ec2_client = get_client("ec2")
+        ec2_client = get_client("ec2", session_context=session_context)
         
         # Prepare parameters for the API call
         kwargs = {}
@@ -818,7 +826,7 @@ async def list_route_tables(limit: Optional[int] = None, search_term: str = "", 
 @register_tool()
 async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = True, 
                       limit: Optional[int] = None, search_term: str = "", 
-                      next_token: Optional[str] = None) -> str:
+                      next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List all subnets in a VPC or across all VPCs.
     
     Args:
@@ -827,11 +835,12 @@ async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = Tru
         limit: Maximum number of subnets to return (None for all)
         search_term: Optional text to filter subnets by ID, VPC ID, CIDR, or tags
         next_token: Optional pagination token for fetching next page of results
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with subnet information
     """
-    logger.info(f"Listing subnets (vpc_id={vpc_id}, include_details={include_details}, limit={limit}, search_term='{search_term}', next_token={next_token})")
+    logger.info(f"Listing subnets (vpc_id={vpc_id}, include_details={include_details}, limit={limit}, search_term='{search_term}', next_token={next_token}, session_context={session_context})")
     
     try:
         # Set up filters if VPC ID is provided
@@ -846,7 +855,8 @@ async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = Tru
             # If next_token is provided, we're requesting a specific page
             response = ec2.describe_subnets(
                 filters=filters,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
             subnets = response.get('Subnets', [])
@@ -860,13 +870,13 @@ async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = Tru
             # No next_token provided, get with optional filtering
             if search_term:
                 # Get all subnets and filter by text
-                subnets = ec2.get_all_subnets(filters=filters)
+                subnets = ec2.get_all_subnets(filters=filters, session_context=session_context)
                 if search_term:
                     subnets = ec2.filter_subnets_by_text(subnets, search_term)
                 next_token_value = None
             else:
                 # Get all subnets if no search term
-                response = ec2.describe_subnets(filters=filters)
+                response = ec2.describe_subnets(filters=filters, session_context=session_context)
                 subnets = response.get('Subnets', [])
                 next_token_value = response.get('NextToken')
         
@@ -918,7 +928,7 @@ async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = Tru
                     'Values': [subnet_id]
                 }]
                 
-                route_tables = ec2.get_all_route_tables(filters=route_table_filters)
+                route_tables = ec2.get_all_route_tables(filters=route_table_filters, session_context=session_context)
                 
                 # Format route tables
                 associated_route_tables = []
@@ -956,7 +966,7 @@ async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = Tru
                     'Values': [subnet_id]
                 }]
                 
-                acl_response = ec2.describe_network_acls(filters=acl_filters)
+                acl_response = ec2.describe_network_acls(filters=acl_filters, session_context=session_context)
                 acls = acl_response.get('NetworkAcls', [])
                 
                 # Format network ACLs
@@ -1030,7 +1040,7 @@ async def list_subnets(vpc_id: Optional[str] = None, include_details: bool = Tru
 @register_tool()
 async def list_ec2_resources(resource_type: str = "all", limit: Optional[int] = None, 
                            search_term: str = "", state: str = "running", 
-                           next_token: Optional[str] = None) -> str:
+                           next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List EC2 resources of the specified type.
     
     Args:
@@ -1039,11 +1049,12 @@ async def list_ec2_resources(resource_type: str = "all", limit: Optional[int] = 
         search_term: Optional search term to filter resources
         state: Instance state to filter by (default is "running"). Only applies to instances.
         next_token: Optional pagination token for fetching next page of results
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with EC2 resource information
     """
-    logger.info(f"Listing EC2 resources (type={resource_type}, limit={limit}, search_term='{search_term}', state='{state}', next_token={next_token})")
+    logger.info(f"Listing EC2 resources (type={resource_type}, limit={limit}, search_term='{search_term}', state='{state}', next_token={next_token}, session_context={session_context})")
     
     try:
         # Normalize resource type
@@ -1057,31 +1068,31 @@ async def list_ec2_resources(resource_type: str = "all", limit: Optional[int] = 
             })
         
         if resource_type == "instances" or resource_type == "all":
-            instances_result = await list_ec2_instances(limit=limit, search_term=search_term, state=state, next_token=next_token if resource_type == "instances" else None)
+            instances_result = await list_ec2_instances(limit=limit, search_term=search_term, state=state, next_token=next_token if resource_type == "instances" else None, session_context=session_context)
             instances_data = json.loads(instances_result)
         else:
             instances_data = {"instances": [], "count": 0, "has_more": False}
         
         if resource_type == "security_groups" or resource_type == "all":
-            sg_result = await list_security_groups(limit=limit, search_term=search_term, next_token=next_token if resource_type == "security_groups" else None)
+            sg_result = await list_security_groups(limit=limit, search_term=search_term, next_token=next_token if resource_type == "security_groups" else None, session_context=session_context)
             sg_data = json.loads(sg_result)
         else:
             sg_data = {"security_groups": [], "count": 0, "has_more": False}
         
         if resource_type == "vpcs" or resource_type == "all":
-            vpc_result = await list_vpcs(limit=limit, search_term=search_term, next_token=next_token if resource_type == "vpcs" else None)
+            vpc_result = await list_vpcs(limit=limit, search_term=search_term, next_token=next_token if resource_type == "vpcs" else None, session_context=session_context)
             vpc_data = json.loads(vpc_result)
         else:
             vpc_data = {"vpcs": [], "count": 0, "has_more": False}
         
         if resource_type == "route_tables" or resource_type == "all":
-            rt_result = await list_route_tables(limit=limit, search_term=search_term, next_token=next_token if resource_type == "route_tables" else None)
+            rt_result = await list_route_tables(limit=limit, search_term=search_term, next_token=next_token if resource_type == "route_tables" else None, session_context=session_context)
             rt_data = json.loads(rt_result)
         else:
             rt_data = {"route_tables": [], "count": 0, "has_more": False}
         
         if resource_type == "subnets" or resource_type == "all":
-            subnet_result = await list_subnets(limit=limit, search_term=search_term, next_token=next_token if resource_type == "subnets" else None)
+            subnet_result = await list_subnets(limit=limit, search_term=search_term, next_token=next_token if resource_type == "subnets" else None, session_context=session_context)
             subnet_data = json.loads(subnet_result)
         else:
             subnet_data = {"subnets": [], "count": 0, "has_more": False}
@@ -1142,21 +1153,22 @@ async def list_ec2_resources(resource_type: str = "all", limit: Optional[int] = 
 
 
 @register_tool()
-async def find_public_security_groups(port: Optional[int] = None) -> str:
+async def find_public_security_groups(port: Optional[int] = None, session_context: Optional[str] = None) -> str:
     """Find security groups with public internet access (0.0.0.0/0).
     
     Args:
         port: Optional specific port to check for public access (e.g., 22 for SSH)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with security groups that allow public access
     """
-    logger.info(f"Finding security groups with public internet access (port={port})")
+    logger.info(f"Finding security groups with public internet access (port={port}, session_context={session_context})")
     
     try:
         # Get all security groups using pagination
         security_groups = []
-        ec2_client = ec2.get_ec2_client()
+        ec2_client = ec2.get_ec2_client(session_context=session_context)
         paginator = ec2_client.get_paginator('describe_security_groups')
         
         # Iterate through all pages
@@ -1293,25 +1305,26 @@ async def find_public_security_groups(port: Optional[int] = None) -> str:
 
 
 @register_tool()
-async def find_instances_with_public_access(port: Optional[int] = None, state: str = "running") -> str:
+async def find_instances_with_public_access(port: Optional[int] = None, state: str = "running", session_context: Optional[str] = None) -> str:
     """Find EC2 instances that have public internet access through their security groups.
     
     Args:
         port: Optional specific port to check for public access (e.g., 22 for SSH)
         state: Instance state to filter by (default is "running")
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with publicly accessible instances
     """
-    logger.info(f"Finding EC2 instances with public access (port={port}, state='{state}')")
+    logger.info(f"Finding EC2 instances with public access (port={port}, state='{state}', session_context={session_context})")
     
     try:
-        # Get all instances in the specified state
+        # Get all instances in the specified state - pass session_context to ec2 service calls
         states = [state] if state else None
-        instances = ec2.get_all_instances(max_items=None, states=states)
+        instances = ec2.get_all_instances(max_items=None, states=states, session_context=session_context)
         
-        # Get all security groups to check for public access
-        security_groups = ec2.get_all_security_groups(max_items=None)
+        # Get all security groups - pass session_context to ec2 service calls
+        security_groups = ec2.get_all_security_groups(max_items=None, session_context=session_context)
         
         # Create lookup dictionary for security groups
         sg_dict = {sg.get('GroupId'): sg for sg in security_groups}
@@ -1446,11 +1459,12 @@ async def find_instances_with_public_access(port: Optional[int] = None, state: s
 
 
 @register_tool()
-async def find_resource_by_ip(ip_address: str) -> str:
+async def find_resource_by_ip(ip_address: str, session_context: Optional[str] = None) -> str:
     """Find AWS resources associated with a specific IP address.
     
     Args:
         ip_address: IP address to search for (public or private)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with information about resources using the IP address
@@ -1458,8 +1472,8 @@ async def find_resource_by_ip(ip_address: str) -> str:
     logger.info(f"Searching for resources with IP address: {ip_address}")
     
     try:
-        # Get EC2 client
-        client = ec2.get_ec2_client()
+        # Get EC2 client - pass session_context to get cross-account access
+        client = ec2.get_ec2_client(session_context=session_context)
         
         # Try to find ENIs with this IP
         private_ip_filters = [
@@ -1581,25 +1595,26 @@ async def find_resource_by_ip(ip_address: str) -> str:
 
 
 @register_tool()
-async def find_instances_by_port(port: int, state: str = "running") -> str:
+async def find_instances_by_port(port: int, state: str = "running", session_context: Optional[str] = None) -> str:
     """Find EC2 instances with security groups allowing access on a specific port.
     
     Args:
         port: The port number to check for
         state: Instance state to filter by (default is "running")
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with instances that have the specified port open
     """
-    logger.info(f"Finding EC2 instances with port {port} open (state='{state}')")
+    logger.info(f"Finding EC2 instances with port {port} open (state='{state}', session_context={session_context})")
     
     try:
-        # Get all instances in the specified state
+        # Get all instances in the specified state - pass session_context to ec2 service calls
         states = [state] if state else None
-        instances = ec2.get_all_instances(max_items=None, states=states)
+        instances = ec2.get_all_instances(max_items=None, states=states, session_context=session_context)
         
-        # Get all security groups
-        security_groups = ec2.get_all_security_groups(max_items=None)
+        # Get all security groups - pass session_context to ec2 service calls
+        security_groups = ec2.get_all_security_groups(max_items=None, session_context=session_context)
         
         # Identify security groups that allow the specified port
         port_open_sg_ids = []
@@ -1721,21 +1736,22 @@ async def find_instances_by_port(port: int, state: str = "running") -> str:
 
 
 @register_tool()
-async def find_security_groups_by_port(port: int) -> str:
+async def find_security_groups_by_port(port: int, session_context: Optional[str] = None) -> str:
     """Find security groups with a specific port open.
     
     Args:
         port: Port number to check for (e.g., 22 for SSH, 3389 for RDP)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with security groups that have the specified port open
     """
-    logger.info(f"Finding security groups with port {port} open")
+    logger.info(f"Finding security groups with port {port} open (session_context={session_context})")
     
     try:
         # Get all security groups using pagination
         security_groups = []
-        ec2_client = ec2.get_ec2_client()
+        ec2_client = ec2.get_ec2_client(session_context=session_context)
         paginator = ec2_client.get_paginator('describe_security_groups')
         
         # Iterate through all pages
@@ -1854,16 +1870,17 @@ async def find_security_groups_by_port(port: int) -> str:
 
 
 @register_tool()
-async def batch_describe_security_groups(security_group_ids: List[str]) -> str:
+async def batch_describe_security_groups(security_group_ids: List[str], session_context: Optional[str] = None) -> str:
     """Batch describe multiple security groups by ID.
     
     Args:
         security_group_ids: List of security group IDs to describe
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with detailed information about multiple security groups
     """
-    logger.info(f"Batch describing {len(security_group_ids)} security groups")
+    logger.info(f"Batch describing {len(security_group_ids)} security groups (session_context={session_context})")
     
     if not security_group_ids:
         return json.dumps({"error": "No security group IDs provided"})
@@ -1875,7 +1892,7 @@ async def batch_describe_security_groups(security_group_ids: List[str]) -> str:
         all_security_groups = []
         not_found_sgs = []
         
-        client = ec2.get_ec2_client()
+        client = ec2.get_ec2_client(session_context=session_context)
         
         # Process in batches
         for i in range(0, len(security_group_ids), batch_size):
@@ -2094,16 +2111,17 @@ async def batch_describe_security_groups(security_group_ids: List[str]) -> str:
 
 
 @register_tool()
-async def batch_describe_instances(instance_ids: List[str]) -> str:
+async def batch_describe_instances(instance_ids: List[str], session_context: Optional[str] = None) -> str:
     """Batch describe multiple EC2 instances by ID.
     
     Args:
         instance_ids: List of EC2 instance IDs to describe
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with detailed information about multiple EC2 instances
     """
-    logger.info(f"Batch describing {len(instance_ids)} EC2 instances")
+    logger.info(f"Batch describing {len(instance_ids)} EC2 instances (session_context={session_context})")
     
     if not instance_ids:
         return json.dumps({"error": "No instance IDs provided"})
@@ -2112,8 +2130,8 @@ async def batch_describe_instances(instance_ids: List[str]) -> str:
         all_instances = []
         not_found_instances = []
         
-        # Get EC2 client
-        client = ec2.get_ec2_client()
+        # Get EC2 client - pass session_context to get cross-account access
+        client = ec2.get_ec2_client(session_context=session_context)
         
         # The EC2 API has a limit of 1000 IDs per call, so we need to batch
         # This isn't limiting the results, just working within API constraints
@@ -2302,7 +2320,7 @@ async def batch_describe_instances(instance_ids: List[str]) -> str:
                 formatted_instance["private_dns_name"] = instance.get('PrivateDnsName')
             
             formatted_instances.append(formatted_instance)
-            
+        
         # Build the final response - all data included, no limits
         result = {
             "summary": f"Found {len(formatted_instances)} of {len(instance_ids)} requested EC2 instances",

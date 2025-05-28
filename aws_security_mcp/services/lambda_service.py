@@ -17,21 +17,23 @@ from aws_security_mcp.utils.policy_evaluator import evaluate_policy_conditions, 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def get_lambda_client(**kwargs: Any) -> boto3.client:
+def get_lambda_client(session_context: Optional[str] = None, **kwargs: Any) -> boto3.client:
     """Get AWS Lambda client.
     
     Args:
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the boto3 client constructor
         
     Returns:
         boto3.client: An initialized Lambda client
     """
-    return get_client('lambda', **kwargs)
+    return get_client('lambda', session_context=session_context, **kwargs)
 
 def list_functions(
     function_version: str = 'ALL',
     marker: Optional[str] = None,
     max_items: int = 50,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """List Lambda functions.
@@ -40,12 +42,13 @@ def list_functions(
         function_version: Version of functions to include (ALL, $LATEST)
         marker: Pagination marker from previous response
         max_items: Maximum number of functions to return
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the list_functions API call
         
     Returns:
         Dict[str, Any]: Response containing Lambda functions
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     params = {
         'FunctionVersion': function_version,
@@ -65,6 +68,7 @@ def list_functions(
 def get_function(
     function_name: str,
     qualifier: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Get details of a Lambda function.
@@ -72,12 +76,13 @@ def get_function(
     Args:
         function_name: Name or ARN of the Lambda function
         qualifier: Version or alias of the function
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the get_function API call
         
     Returns:
         Dict[str, Any]: Response containing Lambda function details
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     params = {
         'FunctionName': function_name,
@@ -96,6 +101,7 @@ def get_function(
 def get_function_configuration(
     function_name: str,
     qualifier: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Get configuration of a Lambda function.
@@ -103,12 +109,13 @@ def get_function_configuration(
     Args:
         function_name: Name or ARN of the Lambda function
         qualifier: Version or alias of the function
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the get_function_configuration API call
         
     Returns:
         Dict[str, Any]: Response containing Lambda function configuration
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     params = {
         'FunctionName': function_name,
@@ -127,6 +134,7 @@ def get_function_configuration(
 def get_all_functions(
     search_term: str = "",
     marker: Optional[str] = None,
+    session_context: Optional[str] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """Get all Lambda functions with proper pagination and optional filtering.
@@ -134,6 +142,7 @@ def get_all_functions(
     Args:
         search_term: Optional search term to filter functions by name
         marker: Pagination token from previous request (used for backward compatibility)
+        session_context: Optional session key for cross-account access
         **kwargs: Additional arguments to pass to the client or list_functions API call
         
     Returns:
@@ -147,8 +156,8 @@ def get_all_functions(
     if 'region_name' in kwargs:
         client_kwargs['region_name'] = kwargs.pop('region_name')
     
-    # Get client with region if specified
-    client = get_lambda_client(**client_kwargs)
+    # Get client with region and session context if specified
+    client = get_lambda_client(session_context=session_context, **client_kwargs)
     
     # Use the paginator for proper handling of large result sets
     paginator = client.get_paginator('list_functions')
@@ -208,19 +217,21 @@ def get_all_functions(
 
 def get_function_environment_variables(
     function_name: str,
-    qualifier: Optional[str] = None
+    qualifier: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, str]:
     """Get environment variables for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
         qualifier: Version or alias of the function
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict[str, str]: Dictionary of environment variables
     """
     try:
-        config = get_function_configuration(function_name, qualifier)
+        config = get_function_configuration(function_name, qualifier, session_context=session_context)
         return config.get('Environment', {}).get('Variables', {})
     except Exception as e:
         logger.error(f"Error getting environment variables for Lambda function {function_name}: {e}")
@@ -258,18 +269,21 @@ def scan_function_environment_variables(
     return matches
 
 def scan_all_functions_for_env_variables(
-    keyword: str = ""
+    keyword: str = "",
+    session_context: Optional[str] = None
 ) -> Dict[str, List[Dict[str, str]]]:
     """Scan all Lambda functions for environment variables containing a keyword.
     
     Args:
         keyword: Keyword to search for in environment variables
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict[str, List[Dict[str, str]]]: Dictionary of function names to matching variables
     """
     results = {}
-    functions = get_all_functions()
+    functions_response = get_all_functions(session_context=session_context)
+    functions = functions_response.get('functions', [])
     
     for function in functions:
         function_name = function.get('FunctionName', 'Unknown')
@@ -280,16 +294,17 @@ def scan_all_functions_for_env_variables(
     
     return results
 
-def get_function_tags(function_name: str) -> Dict[str, str]:
+def get_function_tags(function_name: str, session_context: Optional[str] = None) -> Dict[str, str]:
     """Get tags for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict[str, str]: Dictionary of tags (key-value pairs)
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     try:
         response = client.list_tags(Resource=function_name)
@@ -298,16 +313,17 @@ def get_function_tags(function_name: str) -> Dict[str, str]:
         logger.error(f"Error getting tags for Lambda function {function_name}: {e}")
         return {}
 
-def get_policy(function_name: str) -> Dict[str, Any]:
+def get_policy(function_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get the resource policy for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict[str, Any]: Policy document and metadata
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     try:
         response = client.get_policy(FunctionName=function_name)
@@ -320,16 +336,17 @@ def get_policy(function_name: str) -> Dict[str, Any]:
         logger.error(f"Error getting policy for Lambda function {function_name}: {e}")
         return {}
 
-def list_versions(function_name: str) -> List[Dict[str, Any]]:
+def list_versions(function_name: str, session_context: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get a list of versions for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         List[Dict[str, Any]]: List of version configurations
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     try:
         response = client.list_versions_by_function(FunctionName=function_name)
@@ -338,16 +355,17 @@ def list_versions(function_name: str) -> List[Dict[str, Any]]:
         logger.error(f"Error listing versions for Lambda function {function_name}: {e}")
         return []
 
-def list_aliases(function_name: str) -> List[Dict[str, Any]]:
+def list_aliases(function_name: str, session_context: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get a list of aliases for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         List[Dict[str, Any]]: List of alias configurations
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     try:
         response = client.list_aliases(FunctionName=function_name)
@@ -356,16 +374,17 @@ def list_aliases(function_name: str) -> List[Dict[str, Any]]:
         logger.error(f"Error listing aliases for Lambda function {function_name}: {e}")
         return []
 
-def list_event_source_mappings(function_name: str) -> List[Dict[str, Any]]:
+def list_event_source_mappings(function_name: str, session_context: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get a list of event source mappings for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         List[Dict[str, Any]]: List of event source mappings
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     try:
         response = client.list_event_source_mappings(FunctionName=function_name)
@@ -374,18 +393,19 @@ def list_event_source_mappings(function_name: str) -> List[Dict[str, Any]]:
         logger.error(f"Error listing event source mappings for Lambda function {function_name}: {e}")
         return []
 
-def get_recent_invocations(function_name: str, limit: int = 10) -> List[Dict[str, Any]]:
+def get_recent_invocations(function_name: str, limit: int = 10, session_context: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get recent invocations of a Lambda function from CloudWatch Logs.
     
     Args:
         function_name: Name or ARN of the Lambda function
         limit: Maximum number of invocations to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         List[Dict[str, Any]]: List of recent invocations with metadata
     """
     # Get CloudWatch Logs client to query Lambda logs
-    logs_client = boto3.client('logs')
+    logs_client = get_client('logs', session_context=session_context)
     
     # Lambda log group name pattern
     log_group_name = f"/aws/lambda/{function_name}"
@@ -471,16 +491,17 @@ def get_recent_invocations(function_name: str, limit: int = 10) -> List[Dict[str
         logger.error(f"Error getting recent invocations for Lambda function {function_name}: {e}")
         return []
 
-def get_function_url_config(function_name: str) -> Optional[Dict[str, Any]]:
+def get_function_url_config(function_name: str, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get the function URL configuration for a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict[str, Any] or None: Function URL configuration or None if not configured
     """
-    client = get_lambda_client()
+    client = get_lambda_client(session_context=session_context)
     
     try:
         response = client.get_function_url_config(FunctionName=function_name)
@@ -535,47 +556,7 @@ def check_policy_for_public_access(function_policy: Dict[str, Any]) -> Tuple[boo
     
     return is_public, details
 
-def check_function_public_access(function_name: str) -> Dict[str, Any]:
-    """Check if a Lambda function allows public access through its policy.
-    
-    Args:
-        function_name: Name or ARN of the Lambda function
-        
-    Returns:
-        Dict with public access assessment results
-    """
-    result = {
-        'function_name': function_name,
-        'is_public': False,
-        'policy_analysis': None,
-        'error': None
-    }
-    
-    try:
-        # Get the function policy
-        policy_response = get_policy(function_name)
-        
-        # If no policy exists, the function is not publicly accessible
-        if not policy_response or 'Policy' not in policy_response:
-            return result
-        
-        # Parse the policy JSON
-        policy_json = json.loads(policy_response['Policy'])
-        
-        # Use the policy evaluator to check for public access
-        is_public, policy_analysis = check_policy_for_public_access(policy_json)
-        
-        result['is_public'] = is_public
-        result['policy_analysis'] = policy_analysis
-        
-        return result
-    except Exception as e:
-        error_message = str(e)
-        logger.error(f"Error checking public access for Lambda function {function_name}: {error_message}")
-        result['error'] = error_message
-        return result
-
-def check_function_url_discrepancy(function_name: str) -> Dict[str, Any]:
+def check_function_url_discrepancy(function_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Check if there's a discrepancy between function URL configuration and policy.
     
     This function checks if:
@@ -584,6 +565,7 @@ def check_function_url_discrepancy(function_name: str) -> Dict[str, Any]:
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict with discrepancy information
@@ -602,7 +584,7 @@ def check_function_url_discrepancy(function_name: str) -> Dict[str, Any]:
     
     # Check if function URL is configured
     try:
-        url_config = get_function_url_config(function_name)
+        url_config = get_function_url_config(function_name, session_context=session_context)
         if url_config:
             result['has_function_url'] = True
             result['function_url'] = url_config.get('FunctionUrl')
@@ -612,7 +594,7 @@ def check_function_url_discrepancy(function_name: str) -> Dict[str, Any]:
     
     # Check if policy has function URL permissions
     try:
-        policy_response = get_policy(function_name)
+        policy_response = get_policy(function_name, session_context=session_context)
         if policy_response and 'Policy' in policy_response:
             policy_json = json.loads(policy_response['Policy'])
             
@@ -654,7 +636,48 @@ def check_function_url_discrepancy(function_name: str) -> Dict[str, Any]:
     
     return result
 
-def check_function_security(function_name: str) -> Dict[str, Any]:
+def check_function_public_access(function_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
+    """Check if a Lambda function allows public access through its policy.
+    
+    Args:
+        function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
+        
+    Returns:
+        Dict with public access assessment results
+    """
+    result = {
+        'function_name': function_name,
+        'is_public': False,
+        'policy_analysis': None,
+        'error': None
+    }
+    
+    try:
+        # Get the function policy
+        policy_response = get_policy(function_name, session_context=session_context)
+        
+        # If no policy exists, the function is not publicly accessible
+        if not policy_response or 'Policy' not in policy_response:
+            return result
+        
+        # Parse the policy JSON
+        policy_json = json.loads(policy_response['Policy'])
+        
+        # Use the policy evaluator to check for public access
+        is_public, policy_analysis = check_policy_for_public_access(policy_json)
+        
+        result['is_public'] = is_public
+        result['policy_analysis'] = policy_analysis
+        
+        return result
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"Error checking public access for Lambda function {function_name}: {error_message}")
+        result['error'] = error_message
+        return result
+
+def check_function_security(function_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Perform a comprehensive security assessment of a Lambda function.
     
     This function evaluates multiple security aspects of a Lambda function:
@@ -664,6 +687,7 @@ def check_function_security(function_name: str) -> Dict[str, Any]:
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dict with comprehensive security assessment results
@@ -679,7 +703,7 @@ def check_function_security(function_name: str) -> Dict[str, Any]:
     try:
         # Get function details first
         try:
-            function_details = get_function(function_name)
+            function_details = get_function(function_name, session_context=session_context)
             function_config = function_details.get('Configuration', {})
         except Exception as e:
             logger.error(f"Error getting function details for {function_name}: {e}")
@@ -687,15 +711,15 @@ def check_function_security(function_name: str) -> Dict[str, Any]:
             return result
         
         # Check for public access
-        public_access_result = check_function_public_access(function_name)
+        public_access_result = check_function_public_access(function_name, session_context=session_context)
         result['public_access'] = public_access_result
         
         # Check function URL configuration
-        function_url_result = check_function_url_discrepancy(function_name)
+        function_url_result = check_function_url_discrepancy(function_name, session_context=session_context)
         result['function_url'] = function_url_result
         
         # Check environment variables
-        env_vars = get_function_environment_variables(function_name)
+        env_vars = get_function_environment_variables(function_name, session_context=session_context)
         sensitive_env_var_patterns = [
             'key', 'secret', 'token', 'password', 'credential', 'auth', 
             'cert', 'private', 'api_key', 'apikey'
@@ -728,7 +752,7 @@ def check_function_security(function_name: str) -> Dict[str, Any]:
         
         # Add tags
         try:
-            tags = get_function_tags(function_name)
+            tags = get_function_tags(function_name, session_context=session_context)
             result['tags'] = tags
         except Exception as e:
             logger.warning(f"Error getting tags for {function_name}: {e}")

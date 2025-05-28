@@ -11,6 +11,9 @@ from typing import Any, Dict, List, Optional, Union
 import boto3
 from botocore.exceptions import ClientError
 
+# Import the base service utilities
+from aws_security_mcp.services.base import get_client
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,8 @@ logger = logging.getLogger(__name__)
 def get_all_classic_load_balancers(
     names: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get Classic Load Balancers (ELB) with optional filtering by name.
     
@@ -26,11 +30,12 @@ def get_all_classic_load_balancers(
         names: Optional list of load balancer names to filter by
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with load balancers and pagination details
     """
-    client = boto3.client('elb')
+    client = get_client('elb', session_context=session_context)
     params = {}
     
     if names:
@@ -61,7 +66,8 @@ def get_all_load_balancers_v2(
     load_balancer_type: Optional[str] = None,
     names: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get ELBv2 Load Balancers (ALB, NLB, GWLB) with optional filtering.
     
@@ -70,11 +76,12 @@ def get_all_load_balancers_v2(
         names: Optional list of load balancer names to filter by
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with load balancers and pagination details
     """
-    client = boto3.client('elbv2')
+    client = get_client('elbv2', session_context=session_context)
     params = {}
     
     # Build the filter
@@ -113,7 +120,8 @@ def get_all_load_balancers_v2(
 def get_all_application_load_balancers(
     names: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get Application Load Balancers (ALB) with optional filtering by name.
     
@@ -121,6 +129,7 @@ def get_all_application_load_balancers(
         names: Optional list of load balancer names to filter by
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with Application Load Balancers and pagination details
@@ -129,14 +138,16 @@ def get_all_application_load_balancers(
         load_balancer_type='application',
         names=names,
         next_token=next_token,
-        max_items=max_items
+        max_items=max_items,
+        session_context=session_context
     )
 
 
 def get_all_network_load_balancers(
     names: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get Network Load Balancers (NLB) with optional filtering by name.
     
@@ -144,6 +155,7 @@ def get_all_network_load_balancers(
         names: Optional list of load balancer names to filter by
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with Network Load Balancers and pagination details
@@ -152,14 +164,16 @@ def get_all_network_load_balancers(
         load_balancer_type='network',
         names=names,
         next_token=next_token,
-        max_items=max_items
+        max_items=max_items,
+        session_context=session_context
     )
 
 
 def get_all_gateway_load_balancers(
     names: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get Gateway Load Balancers (GWLB) with optional filtering by name.
     
@@ -167,6 +181,7 @@ def get_all_gateway_load_balancers(
         names: Optional list of load balancer names to filter by
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with Gateway Load Balancers and pagination details
@@ -175,24 +190,27 @@ def get_all_gateway_load_balancers(
         load_balancer_type='gateway',
         names=names,
         next_token=next_token,
-        max_items=max_items
+        max_items=max_items,
+        session_context=session_context
     )
 
 
 def describe_instance_health(
     load_balancer_name: str,
-    instance_ids: Optional[List[str]] = None
+    instance_ids: Optional[List[str]] = None,
+    session_context: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """Describe the health of instances for a Classic Load Balancer.
     
     Args:
         load_balancer_name: Name of the Classic Load Balancer
         instance_ids: Optional list of instance IDs to filter by
+        session_context: Optional session key for cross-account access
         
     Returns:
         List of instance health information
     """
-    client = boto3.client('elb')
+    client = get_client('elb', session_context=session_context)
     params = {
         'LoadBalancerName': load_balancer_name
     }
@@ -211,7 +229,8 @@ def describe_instance_health(
 def get_all_target_groups(
     load_balancer_arn: Optional[str] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get target groups with optional filtering by load balancer ARN.
     
@@ -219,11 +238,12 @@ def get_all_target_groups(
         load_balancer_arn: Optional load balancer ARN to filter by
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with target groups and pagination details
     """
-    client = boto3.client('elbv2')
+    client = get_client('elbv2', session_context=session_context)
     params = {}
         
     if load_balancer_arn:
@@ -251,18 +271,20 @@ def get_all_target_groups(
 
 def describe_target_health(
     target_group_arn: str,
-    targets: Optional[List[Dict[str, str]]] = None
+    targets: Optional[List[Dict[str, str]]] = None,
+    session_context: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """Describe the health of targets in a target group.
     
     Args:
         target_group_arn: ARN of the target group
         targets: Optional list of targets to describe (format: [{"id": "i-1234", "port": 80}])
+        session_context: Optional session key for cross-account access
         
     Returns:
         List of target health descriptions
     """
-    client = boto3.client('elbv2')
+    client = get_client('elbv2', session_context=session_context)
     params = {
         'TargetGroupArn': target_group_arn
     }
@@ -291,7 +313,8 @@ def describe_target_health(
 def get_all_listeners(
     load_balancer_arn: str,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get listeners for a load balancer.
     
@@ -299,11 +322,12 @@ def get_all_listeners(
         load_balancer_arn: ARN of the load balancer
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with listeners and pagination details
     """
-    client = boto3.client('elbv2')
+    client = get_client('elbv2', session_context=session_context)
     
     # Validate the load_balancer_arn
     if not load_balancer_arn or not isinstance(load_balancer_arn, str):
@@ -379,7 +403,8 @@ def get_all_listeners(
 def get_all_rules(
     listener_arn: str,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get rules for a listener.
     
@@ -387,11 +412,12 @@ def get_all_rules(
         listener_arn: ARN of the listener
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with rules and pagination details
     """
-    client = boto3.client('elbv2')
+    client = get_client('elbv2', session_context=session_context)
     
     # Use the paginator for better pagination support
     paginator = client.get_paginator('describe_rules')
@@ -434,11 +460,12 @@ def get_all_rules(
         }
 
 
-def search_load_balancer(identifier: str) -> Optional[Dict[str, Any]]:
+def search_load_balancer(identifier: str, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Search for a load balancer by ARN, name, or DNS name.
     
     Args:
         identifier: ARN, name, or DNS name of the load balancer
+        session_context: Optional session key for cross-account access
         
     Returns:
         Load balancer information if found, None otherwise
@@ -448,7 +475,7 @@ def search_load_balancer(identifier: str) -> Optional[Dict[str, Any]]:
         # Determine if it's a Classic ELB or ELBv2 based on ARN format
         if ':loadbalancer/app/' in identifier or ':loadbalancer/net/' in identifier or ':loadbalancer/gwy/' in identifier:
             # ELBv2 (ALB, NLB, GWLB)
-            client = boto3.client('elbv2')
+            client = get_client('elbv2', session_context=session_context)
             try:
                 response = client.describe_load_balancers(LoadBalancerArns=[identifier])
                 if response.get('LoadBalancers'):
@@ -458,7 +485,7 @@ def search_load_balancer(identifier: str) -> Optional[Dict[str, Any]]:
                 # Continue to classic ELB search
         
         # Classic ELB
-        client = boto3.client('elb')
+        client = get_client('elb', session_context=session_context)
         # For Classic ELB, we need to extract the name from the ARN
         # Format: arn:aws:elasticloadbalancing:region:account-id:loadbalancer/name
         try:
@@ -470,7 +497,7 @@ def search_load_balancer(identifier: str) -> Optional[Dict[str, Any]]:
             logger.error(f"Error searching for Classic load balancer by ARN: {e}")
     
     # If not found by ARN or not an ARN, try by name/DNS in elbv2 first
-    elbv2_client = boto3.client('elbv2')
+    elbv2_client = get_client('elbv2', session_context=session_context)
     try:
         # Try searching by name in ELBv2
         response = elbv2_client.describe_load_balancers(Names=[identifier])
@@ -501,7 +528,7 @@ def search_load_balancer(identifier: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Error searching for ELBv2 load balancer by DNS name: {e}")
     
     # Finally, try Classic ELB by name if not found in ELBv2
-    elb_client = boto3.client('elb')
+    elb_client = get_client('elb', session_context=session_context)
     try:
         response = elb_client.describe_load_balancers(LoadBalancerNames=[identifier])
         if response.get('LoadBalancerDescriptions'):
@@ -597,7 +624,8 @@ def get_load_balancers(
     arns: Optional[List[str]] = None,
     names: Optional[List[str]] = None,
     next_token: Optional[str] = None,
-    max_items: int = 50
+    max_items: int = 50,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get load balancers with flexible filtering options.
     
@@ -610,6 +638,7 @@ def get_load_balancers(
         names: Optional list of load balancer names to filter by (used if arns not provided)
         next_token: Token for pagination (from previous request)
         max_items: Maximum number of items to return
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with load balancers and pagination details
@@ -639,13 +668,14 @@ def get_load_balancers(
         # This is a simplification - a more optimized approach would be to batch ARNs by type
         load_balancers = []
         for arn in arns:
-            lb = search_load_balancer(arn)
+            lb = search_load_balancer(arn, session_context=session_context)
             if lb:
                 # Ensure ARN is always present in the load balancer object
                 if "LoadBalancerArn" not in lb and "LoadBalancerName" in lb:
                     # This is a Classic ELB, create an ARN field for consistency
-                    region = boto3.session.Session().region_name
-                    account_id = boto3.client('sts').get_caller_identity()['Account']
+                    sts_client = get_client('sts', session_context=session_context)
+                    account_id = sts_client.get_caller_identity()['Account']
+                    region = lb.get('AvailabilityZones', [{}])[0].get('ZoneName', '')[:10] if lb.get('AvailabilityZones') else 'us-east-1'
                     lb["LoadBalancerArn"] = f"arn:aws:elasticloadbalancing:{region}:{account_id}:loadbalancer/{lb['LoadBalancerName']}"
                 
                 # Only include essential information for LLM
@@ -669,7 +699,8 @@ def get_load_balancers(
         result = get_all_classic_load_balancers(
             names=names,
             next_token=next_token,
-            max_items=max_items
+            max_items=max_items,
+            session_context=session_context
         )
         
         # Process result to ensure ARNs are returned
@@ -677,8 +708,9 @@ def get_load_balancers(
         for lb in result.get("load_balancers", []):
             if "LoadBalancerName" in lb:
                 # Create ARN for Classic ELB
-                region = boto3.session.Session().region_name
-                account_id = boto3.client('sts').get_caller_identity()['Account']
+                sts_client = get_client('sts', session_context=session_context)
+                account_id = sts_client.get_caller_identity()['Account']
+                region = lb.get('AvailabilityZones', [{}])[0].get('ZoneName', '')[:10] if lb.get('AvailabilityZones') else 'us-east-1'
                 lb_arn = f"arn:aws:elasticloadbalancing:{region}:{account_id}:loadbalancer/{lb['LoadBalancerName']}"
                 
                 # Simplified response with just essential info
@@ -700,19 +732,22 @@ def get_load_balancers(
             result = get_all_application_load_balancers(
                 names=names,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
         elif load_balancer_type == 'network':
             result = get_all_network_load_balancers(
                 names=names,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
         else:  # gateway
             result = get_all_gateway_load_balancers(
                 names=names,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
         
         # Process results to include only essential information
@@ -736,7 +771,8 @@ def get_load_balancers(
     elbv2_result = get_all_load_balancers_v2(
         names=names,
         next_token=next_token,
-        max_items=max_items
+        max_items=max_items,
+        session_context=session_context
     )
     
     # Process ELBv2 results
@@ -761,7 +797,8 @@ def get_load_balancers(
     classic_result = get_all_classic_load_balancers(
         names=names,
         next_token=None,  # We don't pass next_token since we're combining results
-        max_items=remaining_items
+        max_items=remaining_items,
+        session_context=session_context
     )
     
     # Process Classic ELB results
@@ -769,8 +806,9 @@ def get_load_balancers(
     for lb in classic_result.get("load_balancers", []):
         if "LoadBalancerName" in lb:
             # Create ARN for Classic ELB
-            region = boto3.session.Session().region_name
-            account_id = boto3.client('sts').get_caller_identity()['Account']
+            sts_client = get_client('sts', session_context=session_context)
+            account_id = sts_client.get_caller_identity()['Account']
+            region = lb.get('AvailabilityZones', [{}])[0].get('ZoneName', '')[:10] if lb.get('AvailabilityZones') else 'us-east-1'
             lb_arn = f"arn:aws:elasticloadbalancing:{region}:{account_id}:loadbalancer/{lb['LoadBalancerName']}"
             
             processed_classic_lbs.append({
@@ -790,7 +828,8 @@ def get_load_balancers(
 
 def describe_listeners(
     load_balancer_arn: Optional[str] = None,
-    listener_arns: Optional[List[str]] = None
+    listener_arns: Optional[List[str]] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Describe listeners using either load balancer ARN or listener ARNs.
     
@@ -800,11 +839,12 @@ def describe_listeners(
     Args:
         load_balancer_arn: ARN of the load balancer (exclusive with listener_arns)
         listener_arns: List of listener ARNs (exclusive with load_balancer_arn)
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with listeners and any errors
     """
-    client = boto3.client('elbv2')
+    client = get_client('elbv2', session_context=session_context)
     
     # Parameter validation
     if not load_balancer_arn and not listener_arns:

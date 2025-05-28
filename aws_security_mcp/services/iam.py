@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 def list_roles(
     max_items: Optional[int] = None,
     marker: Optional[str] = None,
-    path_prefix: Optional[str] = None
+    path_prefix: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List IAM roles with optional filtering.
     
@@ -30,11 +31,12 @@ def list_roles(
         max_items: Maximum number of roles to return
         marker: Pagination token for subsequent requests
         path_prefix: Filter roles by path prefix
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing roles and pagination information
     """
-    client = get_client('iam')
+    client = get_client('iam', session_context=session_context)
     
     try:
         # Prepare paginator configuration
@@ -48,7 +50,6 @@ def list_roles(
         if max_items:
             # Set MaxItems to 500 max as requested
             pagination_config['MaxItems'] = min(max_items, 500)
-            pagination_config['PageSize'] = min(max_items, 500)
         
         # Get only one page of results
         page_iterator = paginator.paginate(**pagination_config)
@@ -86,16 +87,17 @@ def list_roles(
         logger.error(f"Error listing IAM roles: {str(e)}")
         raise
 
-def get_role(role_name: str) -> Dict[str, Any]:
+def get_role(role_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific IAM role.
     
     Args:
         role_name: The name of the IAM role
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing the role details
     """
-    client = get_client('iam')
+    client = get_client('iam', session_context=session_context)
     
     try:
         # Get the role information
@@ -140,7 +142,8 @@ def get_role(role_name: str) -> Dict[str, Any]:
 def list_users(
     max_items: Optional[int] = None,
     marker: Optional[str] = None,
-    path_prefix: Optional[str] = None
+    path_prefix: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List IAM users with optional filtering.
     
@@ -148,11 +151,12 @@ def list_users(
         max_items: Maximum number of users to return
         marker: Pagination token for subsequent requests
         path_prefix: Filter users by path prefix
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing users and pagination information
     """
-    client = get_client('iam')
+    client = get_client('iam', session_context=session_context)
     
     try:
         # Prepare paginator configuration
@@ -166,7 +170,6 @@ def list_users(
         if max_items:
             # Set MaxItems to 500 max as requested
             pagination_config['MaxItems'] = min(max_items, 500)
-            pagination_config['PageSize'] = min(max_items, 500)
         
         # Get only one page of results
         page_iterator = paginator.paginate(**pagination_config)
@@ -204,16 +207,17 @@ def list_users(
         logger.error(f"Error listing IAM users: {str(e)}")
         raise
 
-def get_user(user_name: str) -> Dict[str, Any]:
+def get_user(user_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific IAM user.
     
     Args:
         user_name: The name of the IAM user
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing the user details
     """
-    client = get_client('iam')
+    client = get_client('iam', session_context=session_context)
     
     try:
         # Get the user information
@@ -289,18 +293,20 @@ def get_user(user_name: str) -> Dict[str, Any]:
 
 def get_policy(
     policy_arn: str, 
-    include_versions: bool = False
+    include_versions: bool = False,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get information about an IAM policy.
     
     Args:
         policy_arn: The ARN of the policy
         include_versions: Whether to include policy versions information
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing the policy details
     """
-    client = get_client('iam')
+    client = get_client('iam', session_context=session_context)
     
     try:
         # Get the policy information
@@ -344,13 +350,15 @@ def get_policy(
 
 def get_policy_batch(
     policy_arns: List[str], 
-    include_versions: bool = False
+    include_versions: bool = False,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get information about multiple IAM policies in batch.
     
     Args:
         policy_arns: List of policy ARNs
         include_versions: Whether to include policy versions information
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict mapping policy ARNs to their details
@@ -362,7 +370,8 @@ def get_policy_batch(
         try:
             policy_details = get_policy(
                 policy_arn=policy_arn,
-                include_versions=include_versions
+                include_versions=include_versions,
+                session_context=session_context
             )
             results[policy_arn] = policy_details
         except Exception as e:
@@ -376,16 +385,17 @@ def get_policy_batch(
         "TotalCount": len(policy_arns)
     }
 
-def find_access_key(access_key_id: str) -> Dict[str, Any]:
+def find_access_key(access_key_id: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Find the IAM user associated with an access key and get key details.
     
     Args:
         access_key_id: The access key ID
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing the access key details and associated user
     """
-    client = get_client('iam')
+    client = get_client('iam', session_context=session_context)
     
     try:
         # List all users

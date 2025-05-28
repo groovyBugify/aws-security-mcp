@@ -28,7 +28,7 @@ from aws_security_mcp.tools.load_balancer_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def load_balancer_operations(operation: str, **params) -> str:
+async def load_balancer_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Load Balancer Operations Hub - Comprehensive traffic distribution and health monitoring.
     
     ⚖️ LOAD BALANCER DISCOVERY:
@@ -74,8 +74,13 @@ async def load_balancer_operations(operation: str, **params) -> str:
     🔧 Get routing rules:
     operation="describe_rules", listener_arn="arn:aws:elasticloadbalancing:..."
     
+    🌐 CROSS-ACCOUNT ACCESS:
+    All operations support cross-account access using session_context parameter:
+    load_balancer_operations(operation="get_load_balancers", session_context="123456789012_aws_dev")
+    
     Args:
         operation: The load balancer operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
         # Load balancer parameters:
         load_balancer_type: Type filter ('classic', 'application', 'network', 'gateway')
@@ -102,6 +107,15 @@ async def load_balancer_operations(operation: str, **params) -> str:
         
     Returns:
         JSON formatted response with operation results and load balancer insights
+        
+    Examples:
+        # Single account operations
+        load_balancer_operations(operation="get_load_balancers", load_balancer_type="application")
+        load_balancer_operations(operation="search_load_balancer", identifier="my-lb")
+        
+        # Cross-account operations
+        load_balancer_operations(operation="get_load_balancers", session_context="123456789012_aws_dev")
+        load_balancer_operations(operation="describe_load_balancer", load_balancer_arn="arn:aws:elasticloadbalancing:...", session_context="123456789012_aws_dev")
     """
     
     logger.info(f"Load balancer operation requested: {operation}")
@@ -123,7 +137,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
                 arns=arns,
                 names=names,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         elif operation == "describe_load_balancer":
@@ -134,7 +149,10 @@ async def load_balancer_operations(operation: str, **params) -> str:
                     "usage": "operation='describe_load_balancer', load_balancer_arn='arn:aws:elasticloadbalancing:...'"
                 })
             
-            return await _describe_load_balancer(load_balancer_arn=load_balancer_arn)
+            return await _describe_load_balancer(
+                load_balancer_arn=load_balancer_arn,
+                session_context=session_context
+            )
             
         elif operation == "search_load_balancer":
             identifier = params.get("identifier")
@@ -144,7 +162,10 @@ async def load_balancer_operations(operation: str, **params) -> str:
                     "usage": "operation='search_load_balancer', identifier='my-load-balancer'"
                 })
             
-            return await _search_load_balancer(identifier=identifier)
+            return await _search_load_balancer(
+                identifier=identifier,
+                session_context=session_context
+            )
             
         elif operation == "get_load_balancer_by_arn":
             load_balancer_arn = params.get("load_balancer_arn")
@@ -154,7 +175,10 @@ async def load_balancer_operations(operation: str, **params) -> str:
                     "usage": "operation='get_load_balancer_by_arn', load_balancer_arn='arn:aws:elasticloadbalancing:...'"
                 })
             
-            return await _get_load_balancer_by_arn(load_balancer_arn=load_balancer_arn)
+            return await _get_load_balancer_by_arn(
+                load_balancer_arn=load_balancer_arn,
+                session_context=session_context
+            )
             
         elif operation == "get_target_groups":
             load_balancer_arn = params.get("load_balancer_arn")
@@ -164,7 +188,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
             return await _get_target_groups(
                 load_balancer_arn=load_balancer_arn,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         elif operation == "describe_target_health":
@@ -179,7 +204,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
             
             return await _describe_target_health(
                 target_group_arn=target_group_arn,
-                targets=targets
+                targets=targets,
+                session_context=session_context
             )
             
         elif operation == "describe_listeners":
@@ -196,7 +222,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
             return await _describe_listeners(
                 load_balancer_arn=load_balancer_arn,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         elif operation == "describe_load_balancer_listeners":
@@ -213,7 +240,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
             return await _describe_load_balancer_listeners(
                 load_balancer_arn=load_balancer_arn,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         elif operation == "describe_listeners_by_arns":
@@ -224,7 +252,10 @@ async def load_balancer_operations(operation: str, **params) -> str:
                     "usage": "operation='describe_listeners_by_arns', listener_arns=['arn:aws:elasticloadbalancing:...']"
                 })
             
-            return await _describe_listeners_by_arns(listener_arns=listener_arns)
+            return await _describe_listeners_by_arns(
+                listener_arns=listener_arns,
+                session_context=session_context
+            )
             
         elif operation == "describe_rules":
             listener_arn = params.get("listener_arn")
@@ -240,7 +271,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
             return await _describe_rules(
                 listener_arn=listener_arn,
                 next_token=next_token,
-                max_items=max_items
+                max_items=max_items,
+                session_context=session_context
             )
             
         elif operation == "describe_instance_health":
@@ -255,7 +287,8 @@ async def load_balancer_operations(operation: str, **params) -> str:
             
             return await _describe_instance_health(
                 load_balancer_name=load_balancer_name,
-                instance_ids=instance_ids
+                instance_ids=instance_ids,
+                session_context=session_context
             )
             
         else:

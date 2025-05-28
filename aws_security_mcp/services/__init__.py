@@ -18,6 +18,7 @@ from aws_security_mcp.services import (
     access_analyzer,
     base,
     cloudfront,
+    credentials,
     ec2,
     ecs,
     ecr,

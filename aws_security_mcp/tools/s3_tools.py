@@ -17,8 +17,11 @@ from aws_security_mcp.tools import register_tool
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def list_s3_buckets() -> Dict[str, Any]:
+async def list_s3_buckets(session_context: Optional[str] = None) -> Dict[str, Any]:
     """List all S3 buckets in the AWS account with basic information.
+
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
     Returns:
         Dict containing list of buckets with basic information
@@ -27,7 +30,7 @@ async def list_s3_buckets() -> Dict[str, Any]:
         logger.info("Listing S3 buckets")
         
         # Get buckets from the service
-        buckets = s3.list_buckets()
+        buckets = s3.list_buckets(session_context=session_context)
         
         # Format bucket information
         formatted_buckets = [
@@ -51,12 +54,14 @@ async def list_s3_buckets() -> Dict[str, Any]:
 
 @register_tool()
 async def get_s3_bucket_details(
-    bucket_name: str
+    bucket_name: str,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get detailed information about a specific S3 bucket.
 
     Args:
         bucket_name: Name of the S3 bucket to get details for
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
     Returns:
         Dict containing detailed bucket information
@@ -65,7 +70,7 @@ async def get_s3_bucket_details(
         logger.info(f"Getting details for S3 bucket: {bucket_name}")
         
         # Get bucket details from the service
-        bucket_details = await get_bucket_details_async(bucket_name)
+        bucket_details = await get_bucket_details_async(bucket_name, session_context)
         
         # Format bucket details
         formatted_details = s3_formatter.format_bucket_details(bucket_details)
@@ -85,22 +90,23 @@ async def get_s3_bucket_details(
             "scan_timestamp": datetime.utcnow().isoformat()
         }
 
-async def get_bucket_details_async(bucket_name: str) -> Dict[str, Any]:
+async def get_bucket_details_async(bucket_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Async wrapper for get_bucket_details.
     
     Args:
         bucket_name: Name of the S3 bucket
+        session_context: Optional session key for cross-account access
         
     Returns:
         Dictionary with comprehensive bucket details
     """
     # Get the basic details synchronously
-    bucket_details = s3.get_bucket_details(bucket_name)
+    bucket_details = s3.get_bucket_details(bucket_name, session_context=session_context)
     
     # If public_access_block requires async, add it separately
     try:
         # Make sure to await the coroutine here
-        public_access_block = await s3.get_bucket_public_access_block(bucket_name)
+        public_access_block = await s3.get_bucket_public_access_block(bucket_name, session_context=session_context)
         
         # The public_access_block is now directly the configuration dict, not a coroutine
         bucket_details['PublicAccessBlock'] = {
@@ -113,12 +119,14 @@ async def get_bucket_details_async(bucket_name: str) -> Dict[str, Any]:
 
 @register_tool()
 async def analyze_s3_bucket_security(
-    bucket_name: str
+    bucket_name: str,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Analyze the security configuration of an S3 bucket.
 
     Args:
         bucket_name: Name of the S3 bucket to analyze
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
     Returns:
         Dict containing security analysis for the bucket
@@ -127,10 +135,10 @@ async def analyze_s3_bucket_security(
         logger.info(f"Analyzing security for S3 bucket: {bucket_name}")
         
         # Get bucket details from the service with async handling
-        bucket_details = await get_bucket_details_async(bucket_name)
+        bucket_details = await get_bucket_details_async(bucket_name, session_context)
         
         # Check if bucket is public
-        is_public, assessment = s3.is_bucket_public(bucket_name)
+        is_public, assessment = s3.is_bucket_public(bucket_name, session_context=session_context)
         
         # Format bucket details for security analysis
         formatted_details = s3_formatter.format_bucket_details(bucket_details)
@@ -180,8 +188,11 @@ async def analyze_s3_bucket_security(
         }
 
 @register_tool()
-async def find_public_buckets() -> Dict[str, Any]:
+async def find_public_buckets(session_context: Optional[str] = None) -> Dict[str, Any]:
     """Find all public S3 buckets in the AWS account.
+
+    Args:
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
     Returns:
         Dict containing assessment of public buckets
@@ -190,7 +201,7 @@ async def find_public_buckets() -> Dict[str, Any]:
         logger.info("Finding public S3 buckets")
         
         # First list all buckets to ensure we get the full list
-        all_buckets = s3.list_buckets()
+        all_buckets = s3.list_buckets(session_context=session_context)
         if not all_buckets:
             logger.warning("No S3 buckets found in the account or unable to list buckets")
             return {
@@ -208,7 +219,7 @@ async def find_public_buckets() -> Dict[str, Any]:
             }
         
         # Get public buckets from the service
-        public_buckets_data = s3.find_public_buckets()
+        public_buckets_data = s3.find_public_buckets(session_context=session_context)
         
         # Format the public buckets assessment
         formatted_assessment = s3_formatter.format_public_buckets_assessment(public_buckets_data)

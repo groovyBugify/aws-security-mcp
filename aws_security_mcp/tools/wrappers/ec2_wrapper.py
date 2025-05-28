@@ -31,7 +31,7 @@ from aws_security_mcp.tools.ec2_tools import (
 logger = logging.getLogger(__name__)
 
 @register_tool()
-async def ec2_security_operations(operation: str, **params) -> str:
+async def ec2_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """EC2 Security Operations Hub - Comprehensive infrastructure analysis and monitoring.
     
     🖥️ INSTANCE OPERATIONS:
@@ -58,17 +58,20 @@ async def ec2_security_operations(operation: str, **params) -> str:
     
     💡 INTELLIGENT USAGE EXAMPLES:
     
-    🖥️ List running instances:
+    🖥️ List running instances in current account:
     operation="list_instances", state="running", limit=50
     
-    🔍 Search for web servers:
-    operation="list_instances", search_term="web", state="running"
+    🏢 List instances in specific account:
+    operation="list_instances", session_context="123456789012_aws_dev", state="running"
+    
+    🔍 Search for web servers across accounts:
+    operation="list_instances", search_term="web", state="running", session_context="123456789012_prod"
     
     🚨 Find internet-exposed instances:
     operation="find_instances_with_public_access", port=22
     
-    🛡️ Audit public security groups:
-    operation="find_public_security_groups", port=80
+    🛡️ Audit public security groups in dev account:
+    operation="find_public_security_groups", session_context="123456789012_aws_dev", port=80
     
     📊 Count instances by state:
     operation="count_instances", state="running"
@@ -81,6 +84,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The EC2 operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+                        Use list_available_sessions() to discover available session keys
         
         # Instance parameters:
         limit: Maximum results to return (default varies by operation)
@@ -106,7 +111,7 @@ async def ec2_security_operations(operation: str, **params) -> str:
         JSON formatted response with operation results and security insights
     """
     
-    logger.info(f"EC2 operation requested: {operation}")
+    logger.info(f"EC2 operation requested: {operation}" + (f" with session_context: {session_context}" if session_context else ""))
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -123,7 +128,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
                 limit=limit,
                 search_term=search_term,
                 state=state,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "count_instances":
@@ -134,7 +140,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
             return await _count_ec2_instances(
                 state=state,
                 has_public_access=has_public_access,
-                port=port
+                port=port,
+                session_context=session_context
             )
             
         elif operation == "batch_describe_instances":
@@ -145,7 +152,7 @@ async def ec2_security_operations(operation: str, **params) -> str:
                     "usage": "operation='batch_describe_instances', instance_ids=['i-123', 'i-456']"
                 })
             
-            return await _batch_describe_instances(instance_ids=instance_ids)
+            return await _batch_describe_instances(instance_ids=instance_ids, session_context=session_context)
             
         elif operation == "find_instances_with_public_access":
             port = params.get("port")
@@ -153,7 +160,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
             
             return await _find_instances_with_public_access(
                 port=port,
-                state=state
+                state=state,
+                session_context=session_context
             )
             
         elif operation == "find_instances_by_port":
@@ -165,7 +173,7 @@ async def ec2_security_operations(operation: str, **params) -> str:
                 })
             
             state = params.get("state", "running")
-            return await _find_instances_by_port(port=port, state=state)
+            return await _find_instances_by_port(port=port, state=state, session_context=session_context)
             
         elif operation == "list_security_groups":
             limit = params.get("limit")
@@ -175,13 +183,14 @@ async def ec2_security_operations(operation: str, **params) -> str:
             return await _list_security_groups(
                 limit=limit,
                 search_term=search_term,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "find_public_security_groups":
             port = params.get("port")
             
-            return await _find_public_security_groups(port=port)
+            return await _find_public_security_groups(port=port, session_context=session_context)
             
         elif operation == "find_security_groups_by_port":
             port = params.get("port")
@@ -191,7 +200,7 @@ async def ec2_security_operations(operation: str, **params) -> str:
                     "usage": "operation='find_security_groups_by_port', port=443"
                 })
             
-            return await _find_security_groups_by_port(port=port)
+            return await _find_security_groups_by_port(port=port, session_context=session_context)
             
         elif operation == "batch_describe_security_groups":
             security_group_ids = params.get("security_group_ids")
@@ -201,7 +210,7 @@ async def ec2_security_operations(operation: str, **params) -> str:
                     "usage": "operation='batch_describe_security_groups', security_group_ids=['sg-123', 'sg-456']"
                 })
             
-            return await _batch_describe_security_groups(security_group_ids=security_group_ids)
+            return await _batch_describe_security_groups(security_group_ids=security_group_ids, session_context=session_context)
             
         elif operation == "list_vpcs":
             limit = params.get("limit")
@@ -211,7 +220,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
             return await _list_vpcs(
                 limit=limit,
                 search_term=search_term,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "list_subnets":
@@ -226,7 +236,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
                 include_details=include_details,
                 limit=limit,
                 search_term=search_term,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "list_route_tables":
@@ -237,7 +248,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
             return await _list_route_tables(
                 limit=limit,
                 search_term=search_term,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         elif operation == "find_resource_by_ip":
@@ -248,7 +260,7 @@ async def ec2_security_operations(operation: str, **params) -> str:
                     "usage": "operation='find_resource_by_ip', ip_address='1.2.3.4'"
                 })
             
-            return await _find_resource_by_ip(ip_address=ip_address)
+            return await _find_resource_by_ip(ip_address=ip_address, session_context=session_context)
             
         elif operation == "list_ec2_resources":
             resource_type = params.get("resource_type", "all")
@@ -262,7 +274,8 @@ async def ec2_security_operations(operation: str, **params) -> str:
                 limit=limit,
                 search_term=search_term,
                 state=state,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
             
         else:

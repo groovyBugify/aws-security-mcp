@@ -1,17 +1,16 @@
 """Lambda Service Wrapper for AWS Security MCP.
 
-This wrapper consolidates all Lambda operations into a single tool
+This wrapper consolidates all AWS Lambda operations into a single tool
 while maintaining semantic richness through detailed operation descriptions.
 """
 
 import json
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from aws_security_mcp.tools import register_tool
 
-# Import existing Lambda functions to reuse them
+# Import existing lambda functions to reuse them
 from aws_security_mcp.tools.lambda_tools import (
     list_functions as _list_functions,
     get_function_details as _get_function_details,
@@ -23,91 +22,75 @@ from aws_security_mcp.tools.lambda_tools import (
 
 logger = logging.getLogger(__name__)
 
-class DateTimeEncoder(json.JSONEncoder):
-    """Custom JSON encoder that handles datetime objects."""
-    
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return super().default(obj)
-
-def safe_json_dumps(data: Any, **kwargs) -> str:
-    """Safely serialize data to JSON, handling datetime objects."""
-    return json.dumps(data, cls=DateTimeEncoder, **kwargs)
-
 @register_tool()
-async def lambda_security_operations(operation: str, **params) -> str:
-    """Lambda Security Operations Hub - Comprehensive serverless function security monitoring.
+async def lambda_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
+    """Lambda Operations Hub - Serverless function security analysis and management.
     
     🔍 FUNCTION DISCOVERY:
     - list_functions: List Lambda functions with optional filtering and pagination
-    - get_function_details: Get detailed information about specific Lambda function(s)
+    - get_function_details: Get comprehensive details about specific functions
     
-    🔐 SECURITY ANALYSIS:
-    - get_function_policy: Get resource policy for Lambda function(s)
-    - list_function_permissions: List permissions granted to invoke a Lambda function
+    🔐 POLICY ANALYSIS:
+    - get_function_policy: Retrieve resource policies for Lambda functions
+    - list_function_permissions: List permissions granted to invoke functions
     
-    📦 DEPENDENCY ANALYSIS:
-    - list_function_layers: List layers used by a Lambda function
+    📦 DEPENDENCY INSPECTION:
+    - list_function_layers: List layers used by Lambda functions
     
-    📊 ACTIVITY MONITORING:
-    - list_invocations: Get recent invocations of a Lambda function from CloudWatch logs
+    📊 MONITORING & LOGS:
+    - list_invocations: Get recent function invocations from CloudWatch logs
     
     💡 INTELLIGENT USAGE EXAMPLES:
     
-    🔍 List all functions:
-    operation="list_functions"
+    🔍 List all Lambda functions:
+    lambda_security_operations(operation="list_functions")
     
-    🔍 List functions with search:
-    operation="list_functions", search_term="api"
+    🔍 Search for specific functions:
+    lambda_security_operations(operation="list_functions", search_term="api", region="us-east-1")
     
-    🔍 List functions in specific region:
-    operation="list_functions", region="us-west-2"
+    🔐 Get function details with security analysis:
+    lambda_security_operations(operation="get_function_details", function_name="my-function")
     
-    🔍 List functions with pagination:
-    operation="list_functions", next_token="previous_token"
+    🔐 Analyze function policies:
+    lambda_security_operations(operation="get_function_policy", function_name=["func1", "func2"])
     
-    📋 Get function details:
-    operation="get_function_details", function_name="my-lambda-function"
+    📦 Check function dependencies:
+    lambda_security_operations(operation="list_function_layers", function_name="my-function")
     
-    📋 Get multiple function details:
-    operation="get_function_details", function_name=["function1", "function2", "function3"]
+    📊 Monitor recent invocations:
+    lambda_security_operations(operation="list_invocations", function_name="my-function", limit=20)
     
-    🔐 Get function policy:
-    operation="get_function_policy", function_name="my-lambda-function"
-    
-    🔐 Get multiple function policies:
-    operation="get_function_policy", function_name=["function1", "function2"]
-    
-    🔐 List function permissions:
-    operation="list_function_permissions", function_name="my-lambda-function"
-    
-    📦 List function layers:
-    operation="list_function_layers", function_name="my-lambda-function"
-    
-    📊 Get recent invocations:
-    operation="list_invocations", function_name="my-lambda-function"
-    
-    📊 Get limited invocations:
-    operation="list_invocations", function_name="my-lambda-function", limit=5
+    🌐 CROSS-ACCOUNT ACCESS:
+    All operations support cross-account access using session_context parameter:
+    lambda_security_operations(operation="list_functions", session_context="123456789012_aws_dev")
     
     Args:
         operation: The Lambda operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
-        # Function identification parameters:
-        function_name: Lambda function name/ARN (required for function-specific operations)
-                      Can be a string for single function or list for multiple functions
+        # Function parameters:
+        function_name: Name/ARN of Lambda function (str or list for batch operations)
+        region: AWS region for function listing
+        search_term: Search term to filter functions by name
         
-        # Function discovery parameters:
-        region: Optional region to filter functions
-        search_term: Optional search term to filter functions by name
-        next_token: Pagination token for fetching the next set of functions
+        # Pagination parameters:
+        next_token: Pagination token for continued results
+        limit: Maximum number of items to return
         
-        # Activity monitoring parameters:
-        limit: Maximum number of invocations to return (default: 10)
+        # Monitoring parameters:
+        limit: Number of recent invocations to retrieve (for list_invocations)
         
     Returns:
-        JSON formatted response with operation results and Lambda security insights
+        JSON formatted response with operation results and Lambda insights
+        
+    Examples:
+        # Single account operations
+        lambda_security_operations(operation="list_functions", search_term="api")
+        lambda_security_operations(operation="get_function_details", function_name="my-function")
+        
+        # Cross-account operations
+        lambda_security_operations(operation="list_functions", session_context="123456789012_aws_dev")
+        lambda_security_operations(operation="get_function_policy", function_name="my-function", session_context="123456789012_aws_dev")
     """
     
     logger.info(f"Lambda operation requested: {operation}")
@@ -122,90 +105,80 @@ async def lambda_security_operations(operation: str, **params) -> str:
             search_term = params.get("search_term", "")
             next_token = params.get("next_token")
             
-            result = await _list_functions(
+            return await _list_functions(
                 region=region,
                 search_term=search_term,
-                next_token=next_token
+                next_token=next_token,
+                session_context=session_context
             )
-            
-            # Parse the JSON string result and return as safe JSON
-            return safe_json_dumps(json.loads(result))
             
         elif operation == "get_function_details":
             function_name = params.get("function_name")
             if not function_name:
-                return safe_json_dumps({
+                return json.dumps({
                     "error": "function_name parameter is required for get_function_details",
-                    "usage": "operation='get_function_details', function_name='my-lambda-function'"
+                    "usage": "operation='get_function_details', function_name='my-function'"
                 })
             
-            result = await _get_function_details(function_name=function_name)
-            
-            # Parse the JSON string result and return as safe JSON
-            return safe_json_dumps(json.loads(result))
+            return await _get_function_details(
+                function_name=function_name,
+                session_context=session_context
+            )
             
         elif operation == "get_function_policy":
             function_name = params.get("function_name")
             if not function_name:
-                return safe_json_dumps({
+                return json.dumps({
                     "error": "function_name parameter is required for get_function_policy",
-                    "usage": "operation='get_function_policy', function_name='my-lambda-function'"
+                    "usage": "operation='get_function_policy', function_name='my-function'"
                 })
             
-            result = await _get_function_policy(function_name=function_name)
-            
-            # Parse the JSON string result and return as safe JSON
-            return safe_json_dumps(json.loads(result))
+            return await _get_function_policy(
+                function_name=function_name,
+                session_context=session_context
+            )
             
         elif operation == "list_function_permissions":
             function_name = params.get("function_name")
             if not function_name:
-                return safe_json_dumps({
+                return json.dumps({
                     "error": "function_name parameter is required for list_function_permissions",
-                    "usage": "operation='list_function_permissions', function_name='my-lambda-function'"
+                    "usage": "operation='list_function_permissions', function_name='my-function'"
                 })
             
-            result = await _list_function_permissions(function_name=function_name)
-            
-            # Parse the JSON string result and return as safe JSON
-            return safe_json_dumps(json.loads(result))
+            return await _list_function_permissions(
+                function_name=function_name,
+                session_context=session_context
+            )
             
         elif operation == "list_function_layers":
             function_name = params.get("function_name")
             if not function_name:
-                return safe_json_dumps({
+                return json.dumps({
                     "error": "function_name parameter is required for list_function_layers",
-                    "usage": "operation='list_function_layers', function_name='my-lambda-function'"
+                    "usage": "operation='list_function_layers', function_name='my-function'"
                 })
             
-            # This returns a formatted string, not JSON, so handle differently
-            result = await _list_function_layers(function_name=function_name)
-            
-            return safe_json_dumps({
-                "function_name": function_name,
-                "layers_info": result,
-                "operation": "list_function_layers"
-            })
+            return await _list_function_layers(
+                function_name=function_name,
+                session_context=session_context
+            )
             
         elif operation == "list_invocations":
             function_name = params.get("function_name")
             if not function_name:
-                return safe_json_dumps({
+                return json.dumps({
                     "error": "function_name parameter is required for list_invocations",
-                    "usage": "operation='list_invocations', function_name='my-lambda-function'"
+                    "usage": "operation='list_invocations', function_name='my-function'"
                 })
             
             limit = params.get("limit", 10)
             
-            # This returns a formatted string, not JSON, so handle differently
-            result = await _list_invocations(function_name=function_name, limit=limit)
-            
-            return safe_json_dumps({
-                "function_name": function_name,
-                "limit": limit,
-                "invocations_info": result,
-                "operation": "list_invocations"
-            })
+            return await _list_invocations(
+                function_name=function_name,
+                limit=limit,
+                session_context=session_context
+            )
             
         else:
             # Provide helpful error with available operations
@@ -214,22 +187,20 @@ async def lambda_security_operations(operation: str, **params) -> str:
                 "list_function_permissions", "list_function_layers", "list_invocations"
             ]
             
-            return safe_json_dumps({
+            return json.dumps({
                 "error": f"Unknown operation: {operation}",
                 "available_operations": available_operations,
                 "usage_examples": {
-                    "list_functions": "operation='list_functions'",
-                    "get_function_details": "operation='get_function_details', function_name='my-lambda-function'",
-                    "get_function_policy": "operation='get_function_policy', function_name='my-lambda-function'",
-                    "list_function_permissions": "operation='list_function_permissions', function_name='my-lambda-function'",
-                    "list_function_layers": "operation='list_function_layers', function_name='my-lambda-function'",
-                    "list_invocations": "operation='list_invocations', function_name='my-lambda-function'"
+                    "list_functions": "operation='list_functions', search_term='api'",
+                    "get_function_details": "operation='get_function_details', function_name='my-function'",
+                    "get_function_policy": "operation='get_function_policy', function_name='my-function'",
+                    "list_invocations": "operation='list_invocations', function_name='my-function', limit=20"
                 }
             })
             
     except Exception as e:
         logger.error(f"Error in Lambda operation '{operation}': {e}")
-        return safe_json_dumps({
+        return json.dumps({
             "error": {
                 "message": f"Error executing Lambda operation '{operation}': {str(e)}",
                 "type": type(e).__name__,
@@ -244,171 +215,115 @@ async def discover_lambda_operations() -> str:
     
     This tool provides comprehensive documentation of Lambda operations available
     through the lambda_security_operations tool, including parameter requirements
-    and practical usage examples for serverless function security monitoring.
+    and practical usage examples.
     
     Returns:
         Detailed catalog of Lambda operations with examples and parameter descriptions
     """
     
     operations_catalog = {
-        "service": "AWS Lambda (Serverless Computing)",
-        "description": "Serverless function security monitoring and analysis",
+        "service": "AWS Lambda",
+        "description": "Serverless function security analysis and management",
         "wrapper_tool": "lambda_security_operations",
-        "supported_features": {
-            "function_discovery": "Find and list Lambda functions with filtering capabilities",
-            "security_analysis": "Analyze function policies, permissions, and access controls",
-            "dependency_analysis": "Examine function layers and dependencies",
-            "activity_monitoring": "Monitor function invocations and performance",
-            "policy_evaluation": "Deep analysis of resource policies and permissions",
-            "vulnerability_assessment": "Identify security risks and misconfigurations"
-        },
+        "cross_account_support": True,
         "operation_categories": {
             "function_discovery": {
                 "list_functions": {
                     "description": "List Lambda functions with optional filtering and pagination",
                     "parameters": {
-                        "region": {"type": "str", "description": "Optional region to filter functions"},
-                        "search_term": {"type": "str", "default": "", "description": "Optional search term to filter functions by name"},
-                        "next_token": {"type": "str", "description": "Pagination token for fetching the next set of functions"}
+                        "region": {"type": "str", "description": "AWS region to filter functions"},
+                        "search_term": {"type": "str", "description": "Search term to filter functions by name"},
+                        "next_token": {"type": "str", "description": "Pagination token for continued results"},
+                        "session_context": {"type": "str", "description": "Cross-account session key"}
                     },
                     "examples": [
                         "lambda_security_operations(operation='list_functions')",
                         "lambda_security_operations(operation='list_functions', search_term='api')",
-                        "lambda_security_operations(operation='list_functions', region='us-west-2')",
-                        "lambda_security_operations(operation='list_functions', next_token='previous_token')"
+                        "lambda_security_operations(operation='list_functions', region='us-east-1')",
+                        "lambda_security_operations(operation='list_functions', session_context='123456789012_aws_dev')"
                     ]
                 },
                 "get_function_details": {
-                    "description": "Get detailed information about specific Lambda function(s)",
+                    "description": "Get comprehensive details about Lambda functions including security analysis",
                     "parameters": {
-                        "function_name": {"type": "str or List[str]", "required": True, "description": "Lambda function name/ARN or list of function names/ARNs"}
+                        "function_name": {"type": "str|list", "required": True, "description": "Function name/ARN or list of names"},
+                        "session_context": {"type": "str", "description": "Cross-account session key"}
                     },
                     "examples": [
-                        "lambda_security_operations(operation='get_function_details', function_name='my-lambda-function')",
-                        "lambda_security_operations(operation='get_function_details', function_name=['function1', 'function2', 'function3'])",
-                        "lambda_security_operations(operation='get_function_details', function_name='arn:aws:lambda:us-east-1:123456789012:function:MyFunction')"
+                        "lambda_security_operations(operation='get_function_details', function_name='my-function')",
+                        "lambda_security_operations(operation='get_function_details', function_name=['func1', 'func2'])",
+                        "lambda_security_operations(operation='get_function_details', function_name='my-function', session_context='123456789012_aws_dev')"
                     ]
                 }
             },
-            "security_analysis": {
+            "policy_analysis": {
                 "get_function_policy": {
-                    "description": "Get resource policy for Lambda function(s)",
+                    "description": "Retrieve resource policies for Lambda functions",
                     "parameters": {
-                        "function_name": {"type": "str or List[str]", "required": True, "description": "Lambda function name/ARN or list of function names/ARNs"}
+                        "function_name": {"type": "str|list", "required": True, "description": "Function name/ARN or list of names"},
+                        "session_context": {"type": "str", "description": "Cross-account session key"}
                     },
                     "examples": [
-                        "lambda_security_operations(operation='get_function_policy', function_name='my-lambda-function')",
-                        "lambda_security_operations(operation='get_function_policy', function_name=['function1', 'function2'])"
+                        "lambda_security_operations(operation='get_function_policy', function_name='my-function')",
+                        "lambda_security_operations(operation='get_function_policy', function_name=['func1', 'func2'])"
                     ]
                 },
                 "list_function_permissions": {
-                    "description": "List permissions granted to invoke a Lambda function",
+                    "description": "List permissions granted to invoke Lambda functions",
                     "parameters": {
-                        "function_name": {"type": "str", "required": True, "description": "Lambda function name/ARN"}
+                        "function_name": {"type": "str", "required": True, "description": "Function name or ARN"},
+                        "session_context": {"type": "str", "description": "Cross-account session key"}
                     },
-                    "examples": [
-                        "lambda_security_operations(operation='list_function_permissions', function_name='my-lambda-function')",
-                        "lambda_security_operations(operation='list_function_permissions', function_name='api-gateway-function')"
-                    ]
+                    "example": "lambda_security_operations(operation='list_function_permissions', function_name='my-function')"
                 }
             },
-            "dependency_analysis": {
+            "dependency_inspection": {
                 "list_function_layers": {
-                    "description": "List layers used by a Lambda function",
+                    "description": "List layers used by Lambda functions",
                     "parameters": {
-                        "function_name": {"type": "str", "required": True, "description": "Lambda function name/ARN"}
+                        "function_name": {"type": "str", "required": True, "description": "Function name or ARN"},
+                        "session_context": {"type": "str", "description": "Cross-account session key"}
                     },
-                    "examples": [
-                        "lambda_security_operations(operation='list_function_layers', function_name='my-lambda-function')",
-                        "lambda_security_operations(operation='list_function_layers', function_name='data-processing-function')"
-                    ]
+                    "example": "lambda_security_operations(operation='list_function_layers', function_name='my-function')"
                 }
             },
-            "activity_monitoring": {
+            "monitoring_and_logs": {
                 "list_invocations": {
-                    "description": "Get recent invocations of a Lambda function from CloudWatch logs",
+                    "description": "Get recent function invocations from CloudWatch logs",
                     "parameters": {
-                        "function_name": {"type": "str", "required": True, "description": "Lambda function name/ARN"},
-                        "limit": {"type": "int", "default": 10, "description": "Maximum number of invocations to return"}
+                        "function_name": {"type": "str", "required": True, "description": "Function name or ARN"},
+                        "limit": {"type": "int", "description": "Maximum number of invocations to return"},
+                        "session_context": {"type": "str", "description": "Cross-account session key"}
                     },
                     "examples": [
-                        "lambda_security_operations(operation='list_invocations', function_name='my-lambda-function')",
-                        "lambda_security_operations(operation='list_invocations', function_name='my-lambda-function', limit=5)",
-                        "lambda_security_operations(operation='list_invocations', function_name='monitoring-function', limit=20)"
+                        "lambda_security_operations(operation='list_invocations', function_name='my-function')",
+                        "lambda_security_operations(operation='list_invocations', function_name='my-function', limit=20)"
                     ]
                 }
             }
         },
-        "lambda_security_insights": {
+        "lambda_insights": {
             "common_operations": [
                 "List all functions: operation='list_functions'",
-                "Get function details: operation='get_function_details', function_name='my-function'",
-                "Get function policy: operation='get_function_policy', function_name='my-function'",
-                "Check function permissions: operation='list_function_permissions', function_name='my-function'"
-            ],
-            "security_monitoring_patterns": [
-                "Audit function resource policies and cross-account access",
-                "Monitor function URL configurations and authentication settings",
-                "Review IAM execution roles and their permissions",
-                "Check for functions with overly permissive policies",
-                "Analyze function environment variables for sensitive data",
-                "Monitor function invocation patterns and anomalies",
-                "Review function layers for security vulnerabilities",
-                "Check function VPC configurations and network access"
+                "Search functions: operation='list_functions', search_term='api'",
+                "Analyze function security: operation='get_function_details', function_name='my-function'",
+                "Check function policies: operation='get_function_policy', function_name='my-function'",
+                "Monitor invocations: operation='list_invocations', function_name='my-function'"
             ],
             "security_best_practices": [
-                "Use least privilege IAM roles for function execution",
-                "Avoid storing sensitive data in environment variables",
-                "Enable function-level concurrent execution limits",
-                "Use VPC configurations for functions accessing private resources",
-                "Implement proper authentication for function URLs",
-                "Regularly update function runtime versions",
-                "Use AWS Secrets Manager for sensitive configuration",
-                "Monitor function logs for security events",
-                "Implement proper error handling to prevent information leakage",
-                "Use resource-based policies for fine-grained access control"
+                "Regularly audit function resource policies for public access",
+                "Monitor function URLs for proper authentication settings", 
+                "Review environment variables for sensitive data exposure",
+                "Check function execution roles for least privilege",
+                "Analyze function invocation patterns for anomalies"
             ],
-            "compliance_considerations": [
-                "Ensure functions comply with data residency requirements",
-                "Implement proper audit logging for compliance tracking",
-                "Review function access patterns for regulatory compliance",
-                "Ensure sensitive data is properly encrypted at rest and in transit",
-                "Implement proper data retention policies for function logs",
-                "Monitor for unauthorized function modifications",
-                "Ensure proper segregation of duties in function management",
-                "Implement compliance monitoring for function configurations"
-            ],
-            "vulnerability_assessment": [
-                "Check for functions with public access (AuthType=NONE)",
-                "Identify functions with overly broad resource policies",
-                "Monitor for functions using deprecated runtime versions",
-                "Check for hardcoded credentials in function code",
-                "Identify functions with excessive IAM permissions",
-                "Monitor for functions exposed through insecure triggers",
-                "Check for functions with disabled CloudTrail logging",
-                "Identify functions with weak or missing authentication"
-            ],
-            "performance_and_cost": [
-                "Monitor function memory and timeout configurations",
-                "Analyze function invocation patterns for optimization",
-                "Review function cold start performance",
-                "Monitor function cost and usage patterns",
-                "Check for unused or idle functions",
-                "Analyze function layer usage and optimization opportunities",
-                "Monitor function concurrent execution limits",
-                "Review function provisioned concurrency settings"
-            ],
-            "integration_security": [
-                "Monitor API Gateway integration security",
-                "Review S3 trigger configurations and permissions",
-                "Check EventBridge rule configurations",
-                "Analyze SQS and SNS trigger security settings",
-                "Review CloudWatch Events integration",
-                "Monitor DynamoDB stream trigger configurations",
-                "Check Kinesis stream integration security",
-                "Review Application Load Balancer target configurations"
+            "cross_account_patterns": [
+                "Use session_context for cross-account function analysis",
+                "Batch analyze functions across multiple accounts",
+                "Compare function configurations between environments",
+                "Audit cross-account function access patterns"
             ]
         }
     }
     
-    return safe_json_dumps(operations_catalog, indent=2) 
+    return json.dumps(operations_catalog, indent=2) 

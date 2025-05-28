@@ -24,13 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 @register_tool()
-async def list_functions(region: Optional[str] = None, search_term: str = "", next_token: Optional[str] = None) -> str:
+async def list_functions(region: Optional[str] = None, search_term: str = "", next_token: Optional[str] = None, session_context: Optional[str] = None) -> str:
     """List Lambda functions in the AWS account.
     
     Args:
         region: Optional region to filter functions
         search_term: Optional search term to filter functions by name
         next_token: Pagination token for fetching the next set of functions (optional)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with Lambda functions
@@ -42,6 +43,8 @@ async def list_functions(region: Optional[str] = None, search_term: str = "", ne
         client_kwargs = {}
         if region:
             client_kwargs['region_name'] = region
+        if session_context:
+            client_kwargs['session_context'] = session_context
         
         # Get functions with optional region - now automatically includes all functions with pagination
         functions_response = lambda_service.get_all_functions(
@@ -103,14 +106,22 @@ async def list_functions(region: Optional[str] = None, search_term: str = "", ne
 
 
 @register_tool()
-async def get_function_details(function_name: Union[str, List[str]]) -> str:
+async def get_function_details(function_name: Union[str, List[str]], session_context: Optional[str] = None) -> str:
     """Get detailed information about one or more Lambda functions.
     
     Args:
         function_name: Name/ARN of the Lambda function, or a list of function names/ARNs
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with Lambda function details
+        
+    Examples:
+        # Single account (default)
+        get_function_details("my-function")
+        
+        # Cross-account access
+        get_function_details("my-function", session_context="123456789012_aws_dev")
     """
     # Handle single function name vs list of names
     if isinstance(function_name, str):
@@ -127,7 +138,7 @@ async def get_function_details(function_name: Union[str, List[str]]) -> str:
     for fn_name in function_names:
         try:
             # Get function details
-            function = lambda_service.get_function(fn_name)
+            function = lambda_service.get_function(fn_name, session_context=session_context)
             
             if not function:
                 result = {
@@ -152,7 +163,7 @@ async def get_function_details(function_name: Union[str, List[str]]) -> str:
             # Get policy and add to result
             policy_json = None
             try:
-                policy = lambda_service.get_policy(fn_name)
+                policy = lambda_service.get_policy(fn_name, session_context=session_context)
                 if policy:
                     policy_document = policy.get('Policy', '{}')
                     
@@ -247,7 +258,7 @@ async def get_function_details(function_name: Union[str, List[str]]) -> str:
             
             try:
                 # Get function URL configuration if available
-                url_config = lambda_service.get_function_url_config(fn_name)
+                url_config = lambda_service.get_function_url_config(fn_name, session_context=session_context)
                 
                 if url_config:
                     url_security["has_function_url"] = True
@@ -258,7 +269,7 @@ async def get_function_details(function_name: Union[str, List[str]]) -> str:
                     formatted_data["function_url_config"] = format_function_url_config_json(url_config)
                     
                     # Check for potential discrepancies between function URL and policy
-                    discrepancy_check = lambda_service.check_function_url_discrepancy(fn_name)
+                    discrepancy_check = lambda_service.check_function_url_discrepancy(fn_name, session_context=session_context)
                     formatted_discrepancy = format_function_url_discrepancy_json(discrepancy_check)
                     
                     # Add detailed security assessment
@@ -378,14 +389,22 @@ async def get_function_details(function_name: Union[str, List[str]]) -> str:
 
 
 @register_tool()
-async def get_function_policy(function_name: Union[str, List[str]]) -> str:
+async def get_function_policy(function_name: Union[str, List[str]], session_context: Optional[str] = None) -> str:
     """Get the resource policy for one or more Lambda functions.
     
     Args:
         function_name: Name or ARN of the Lambda function, or a list of function names/ARNs
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with Lambda function policies
+        
+    Examples:
+        # Single account (default)
+        get_function_policy("my-function")
+        
+        # Cross-account access
+        get_function_policy("my-function", session_context="123456789012_aws_dev")
     """
     # If a single function name is provided, convert to list for consistent processing
     if isinstance(function_name, str):
@@ -399,7 +418,7 @@ async def get_function_policy(function_name: Union[str, List[str]]) -> str:
     
     for fn_name in function_names:
         try:
-            policy = lambda_service.get_policy(fn_name)
+            policy = lambda_service.get_policy(fn_name, session_context=session_context)
             
             result = {
                 "functionName": fn_name,
@@ -440,19 +459,27 @@ async def get_function_policy(function_name: Union[str, List[str]]) -> str:
 
 
 @register_tool()
-async def list_function_permissions(function_name: str) -> str:
+async def list_function_permissions(function_name: str, session_context: Optional[str] = None) -> str:
     """List permissions granted to invoke a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         JSON formatted string with Lambda function permissions
+        
+    Examples:
+        # Single account (default)
+        list_function_permissions("my-function")
+        
+        # Cross-account access
+        list_function_permissions("my-function", session_context="123456789012_aws_dev")
     """
     logger.info(f"Listing permissions for Lambda function: {function_name}")
     
     try:
-        policy = lambda_service.get_policy(function_name)
+        policy = lambda_service.get_policy(function_name, session_context=session_context)
         
         if not policy or 'Policy' not in policy:
             return json.dumps({
@@ -522,19 +549,27 @@ async def list_function_permissions(function_name: str) -> str:
 
 
 @register_tool()
-async def list_function_layers(function_name: str) -> str:
+async def list_function_layers(function_name: str, session_context: Optional[str] = None) -> str:
     """List layers used by a Lambda function.
     
     Args:
         function_name: Name or ARN of the Lambda function
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Formatted string with Lambda function layers
+        
+    Examples:
+        # Single account (default)
+        list_function_layers("my-function")
+        
+        # Cross-account access
+        list_function_layers("my-function", session_context="123456789012_aws_dev")
     """
     logger.info(f"Listing layers for Lambda function: {function_name}")
     
     try:
-        function = lambda_service.get_function(function_name)
+        function = lambda_service.get_function(function_name, session_context=session_context)
         
         if not function:
             return f"Lambda function '{function_name}' not found"
@@ -575,20 +610,28 @@ async def list_function_layers(function_name: str) -> str:
 
 
 @register_tool()
-async def list_invocations(function_name: str, limit: int = 10) -> str:
+async def list_invocations(function_name: str, limit: int = 10, session_context: Optional[str] = None) -> str:
     """Get recent invocations of a Lambda function from CloudWatch logs.
     
     Args:
         function_name: Name or ARN of the Lambda function
         limit: Maximum number of invocations to return
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Formatted string with recent Lambda function invocations
+        
+    Examples:
+        # Single account (default)
+        list_invocations("my-function", limit=5)
+        
+        # Cross-account access
+        list_invocations("my-function", limit=5, session_context="123456789012_aws_dev")
     """
     logger.info(f"Getting recent invocations for Lambda function: {function_name} (limit={limit})")
     
     try:
-        invocations = lambda_service.get_recent_invocations(function_name, limit=limit)
+        invocations = lambda_service.get_recent_invocations(function_name, limit=limit, session_context=session_context)
         
         if not invocations:
             return f"No recent invocations found for Lambda function '{function_name}'"

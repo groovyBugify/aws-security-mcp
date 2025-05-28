@@ -44,6 +44,10 @@ SERVICE_WRAPPER_TOOLS: Set[str] = {
     "discover_waf_operations",
     "trusted_advisor_security_operations",
     "discover_trusted_advisor_operations",
+    "refresh_aws_session",
+    "connected_aws_accounts",
+    "aws_session_operations",
+    "discover_aws_session_operations",
     
     # 🚧 Future wrappers (to be implemented)
     "account_security_operations",  # For account-level tools

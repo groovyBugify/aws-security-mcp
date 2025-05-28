@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 @register_tool()
 async def find_iam_role(
     role_name: str,
-    format_response: bool = True
+    format_response: bool = True,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Find and get detailed information about a specific IAM role.
     
@@ -31,13 +32,14 @@ async def find_iam_role(
     Args:
         role_name: Name of the IAM role to find
         format_response: Whether to format the response for security analysis
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing complete role details
     """
     try:
         # Get the role details from the service
-        role_details = iam_service.get_role(role_name=role_name)
+        role_details = iam_service.get_role(role_name=role_name, session_context=session_context)
         
         # Format the response if requested
         if format_response:
@@ -57,7 +59,8 @@ async def find_iam_role(
 @register_tool()
 async def find_iam_user(
     user_name: str,
-    format_response: bool = True
+    format_response: bool = True,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Find and get detailed information about a specific IAM user.
     
@@ -73,13 +76,14 @@ async def find_iam_user(
     Args:
         user_name: Name of the IAM user to find
         format_response: Whether to format the response for security analysis
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing complete user details
     """
     try:
         # Get the user details from the service
-        user_details = iam_service.get_user(user_name=user_name)
+        user_details = iam_service.get_user(user_name=user_name, session_context=session_context)
         
         # Format the response if requested
         if format_response:
@@ -102,7 +106,8 @@ async def list_iam_roles(
     marker: Optional[str] = None,
     path_prefix: Optional[str] = None,
     format_response: bool = True,
-    names_only: bool = False
+    names_only: bool = False,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List IAM roles in the AWS account with optional filtering.
     
@@ -112,6 +117,7 @@ async def list_iam_roles(
         path_prefix: Filter roles by path prefix
         format_response: Whether to format the response for security analysis
         names_only: If True, returns only a list of role names
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing roles and pagination information
@@ -121,7 +127,8 @@ async def list_iam_roles(
         roles_response = iam_service.list_roles(
             max_items=max_items,
             marker=marker,
-            path_prefix=path_prefix
+            path_prefix=path_prefix,
+            session_context=session_context
         )
         
         # Handle names_only case (most minimal response)
@@ -164,7 +171,8 @@ async def list_iam_users(
     marker: Optional[str] = None,
     path_prefix: Optional[str] = None,
     format_response: bool = True,
-    names_only: bool = False
+    names_only: bool = False,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """List IAM users in the AWS account with optional filtering.
     
@@ -174,6 +182,7 @@ async def list_iam_users(
         path_prefix: Filter users by path prefix
         format_response: Whether to format the response for security analysis
         names_only: If True, returns only a list of user names
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing users and pagination information
@@ -183,7 +192,8 @@ async def list_iam_users(
         users_response = iam_service.list_users(
             max_items=max_items,
             marker=marker,
-            path_prefix=path_prefix
+            path_prefix=path_prefix,
+            session_context=session_context
         )
         
         # Handle names_only case (most minimal response)
@@ -223,20 +233,22 @@ async def list_iam_users(
 @register_tool()
 async def find_access_key(
     access_key_id: str,
-    format_response: bool = True
+    format_response: bool = True,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Find details about an IAM access key including the associated user.
     
     Args:
         access_key_id: The access key ID to search for
         format_response: Whether to format the response for security analysis
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing access key details and associated user information
     """
     try:
         # Get the access key details from the service
-        access_key_response = iam_service.find_access_key(access_key_id=access_key_id)
+        access_key_response = iam_service.find_access_key(access_key_id=access_key_id, session_context=session_context)
         
         # Format the response if requested
         if format_response:
@@ -275,7 +287,8 @@ async def find_access_key(
 async def get_iam_policy_details(
     policy_arn: str,
     include_versions: bool = False,
-    format_response: bool = True
+    format_response: bool = True,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get detailed information about a specific IAM policy.
     
@@ -283,6 +296,7 @@ async def get_iam_policy_details(
         policy_arn: The ARN of the policy to retrieve
         include_versions: Whether to include all policy versions information
         format_response: Whether to format the response for security analysis
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing the policy details
@@ -291,7 +305,8 @@ async def get_iam_policy_details(
         # Get the policy details from the service
         policy_response = iam_service.get_policy(
             policy_arn=policy_arn,
-            include_versions=include_versions
+            include_versions=include_versions,
+            session_context=session_context
         )
         
         # Format the response if requested
@@ -320,7 +335,8 @@ async def get_iam_policy_details(
 async def get_iam_policy_batch(
     policy_arns: List[str],
     include_versions: bool = False,
-    format_response: bool = True
+    format_response: bool = True,
+    session_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get details about multiple IAM policies in batch.
     
@@ -328,6 +344,7 @@ async def get_iam_policy_batch(
         policy_arns: List of policy ARNs to retrieve
         include_versions: Whether to include all policy versions information
         format_response: Whether to format the response for security analysis
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
         Dict containing details for each requested policy
@@ -336,7 +353,8 @@ async def get_iam_policy_batch(
         # Get the policies in batch from the service
         batch_response = iam_service.get_policy_batch(
             policy_arns=policy_arns,
-            include_versions=include_versions
+            include_versions=include_versions,
+            session_context=session_context
         )
         
         # Format the response if requested

@@ -37,7 +37,7 @@ def safe_json_dumps(data: Any, **kwargs) -> str:
     return json.dumps(data, cls=DateTimeEncoder, **kwargs)
 
 @register_tool()
-async def iam_security_operations(operation: str, **params) -> str:
+async def iam_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """IAM Security Operations Hub - Comprehensive identity and access management security monitoring.
     
     👤 USER MANAGEMENT:
@@ -57,8 +57,11 @@ async def iam_security_operations(operation: str, **params) -> str:
     
     💡 INTELLIGENT USAGE EXAMPLES:
     
-    👤 Find specific user:
+    👤 Find specific user in current account:
     operation="find_user", user_name="john.doe"
+    
+    🏢 Find specific user in another account:
+    operation="find_user", user_name="john.doe", session_context="123456789012_aws_dev"
     
     👤 List all users (names only):
     operation="list_users", names_only=True
@@ -89,6 +92,8 @@ async def iam_security_operations(operation: str, **params) -> str:
     
     Args:
         operation: The IAM operation to perform (see descriptions above)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+                        Use list_available_sessions() to discover available session keys
         
         # User/Role parameters:
         user_name: IAM user name (required for user operations)
@@ -115,7 +120,7 @@ async def iam_security_operations(operation: str, **params) -> str:
         JSON formatted response with operation results and IAM security insights
     """
     
-    logger.info(f"IAM operation requested: {operation}")
+    logger.info(f"IAM operation requested: {operation}" + (f" with session_context: {session_context}" if session_context else ""))
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -133,7 +138,8 @@ async def iam_security_operations(operation: str, **params) -> str:
             format_response = params.get("format_response", True)
             return safe_json_dumps(await _find_iam_user(
                 user_name=user_name,
-                format_response=format_response
+                format_response=format_response,
+                session_context=session_context
             ))
             
         elif operation == "list_users":
@@ -148,7 +154,8 @@ async def iam_security_operations(operation: str, **params) -> str:
                 marker=marker,
                 path_prefix=path_prefix,
                 format_response=format_response,
-                names_only=names_only
+                names_only=names_only,
+                session_context=session_context
             ))
             
         elif operation == "find_role":
@@ -162,7 +169,8 @@ async def iam_security_operations(operation: str, **params) -> str:
             format_response = params.get("format_response", True)
             return safe_json_dumps(await _find_iam_role(
                 role_name=role_name,
-                format_response=format_response
+                format_response=format_response,
+                session_context=session_context
             ))
             
         elif operation == "list_roles":
@@ -177,7 +185,8 @@ async def iam_security_operations(operation: str, **params) -> str:
                 marker=marker,
                 path_prefix=path_prefix,
                 format_response=format_response,
-                names_only=names_only
+                names_only=names_only,
+                session_context=session_context
             ))
             
         elif operation == "find_access_key":
@@ -191,7 +200,8 @@ async def iam_security_operations(operation: str, **params) -> str:
             format_response = params.get("format_response", True)
             return safe_json_dumps(await _find_access_key(
                 access_key_id=access_key_id,
-                format_response=format_response
+                format_response=format_response,
+                session_context=session_context
             ))
             
         elif operation == "get_policy_details":
@@ -207,7 +217,8 @@ async def iam_security_operations(operation: str, **params) -> str:
             return safe_json_dumps(await _get_iam_policy_details(
                 policy_arn=policy_arn,
                 include_versions=include_versions,
-                format_response=format_response
+                format_response=format_response,
+                session_context=session_context
             ))
             
         elif operation == "get_policy_batch":
@@ -223,7 +234,8 @@ async def iam_security_operations(operation: str, **params) -> str:
             return safe_json_dumps(await _get_iam_policy_batch(
                 policy_arns=policy_arns,
                 include_versions=include_versions,
-                format_response=format_response
+                format_response=format_response,
+                session_context=session_context
             ))
             
         else:

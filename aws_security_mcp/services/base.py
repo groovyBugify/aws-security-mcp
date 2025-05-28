@@ -39,49 +39,66 @@ atexit.register(lambda: clear_client_cache())
 
 def get_aws_session(
     region: Optional[str] = None,
-    profile: Optional[str] = None
+    profile: Optional[str] = None,
+    session_context: Optional[str] = None
 ) -> boto3.Session:
     """Get an AWS session with the specified configuration.
     
     Args:
-        region: AWS region name (overrides config)
-        profile: AWS profile name (overrides config)
+        region: AWS region to use (defaults to config region)
+        profile: AWS profile to use (defaults to config profile)
+        session_context: Session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
-        Configured boto3 Session object
+        Configured boto3 Session
     """
-    # Use values from config if not specified
+    logger = logging.getLogger(__name__)
+    
+    # If session_context is provided, try to get cross-account session
+    if session_context:
+        try:
+            from aws_security_mcp.services.credentials import get_session_for_account
+            cross_account_session = get_session_for_account(session_context)
+            if cross_account_session and not cross_account_session.is_expired():
+                logger.info(f"Using cross-account session: {session_context} ({cross_account_session.account_name})")
+                return cross_account_session.session
+            else:
+                logger.warning(f"Cross-account session '{session_context}' not found or expired, falling back to default")
+        except Exception as e:
+            logger.warning(f"Error accessing cross-account session '{session_context}': {e}, falling back to default")
+    
+    # Use provided or default values
     region = region or config.aws.aws_region
     profile = profile or config.aws.aws_profile
     
-    session_kwargs = {
-        "region_name": region
-    }
+    # Build session arguments
+    session_kwargs = {"region_name": region}
     
-    # Determine credential source
-    logger.debug("Determining AWS credential source...")
-    
-    # Profile takes precedence if explicitly provided
-    if profile:
-        logger.info(f"Using AWS profile: {profile}")
+    # Add credentials if available
+    if config.aws.has_profile and profile:
         session_kwargs["profile_name"] = profile
-        
-    # Otherwise, check for explicit credentials based on credential type
-    elif config.aws.credentials_source == "sts":
-        logger.info("Using STS temporary credentials")
+        logger.info(f"Using AWS profile: {profile}")
+    elif config.aws.has_sts_credentials:
         session_kwargs.update({
             "aws_access_key_id": config.aws.aws_access_key_id,
             "aws_secret_access_key": config.aws.aws_secret_access_key,
             "aws_session_token": config.aws.aws_session_token
         })
-    elif config.aws.credentials_source == "iam":
-        logger.info("Using IAM access key credentials")
+        logger.info("Using temporary STS credentials")
+    elif config.aws.has_iam_credentials:
         session_kwargs.update({
             "aws_access_key_id": config.aws.aws_access_key_id,
             "aws_secret_access_key": config.aws.aws_secret_access_key
         })
+        logger.info("Using IAM access key credentials")
     else:
-        logger.info("Using automatic credential resolution (environment variables, AWS config files, or instance profile)")
+        # Provide more specific logging for automatic credential resolution
+        if config.aws.is_ecs_environment:
+            logger.info("Using automatic credential resolution (ECS Task Role detected)")
+        elif config.aws.is_ec2_environment:
+            logger.info("Using automatic credential resolution (EC2 Instance Profile detected)")
+        else:
+            logger.info("Using automatic credential resolution (environment variables, AWS config files, or instance profile)")
     
     # Create and return the session
     try:
@@ -104,58 +121,35 @@ def get_aws_session(
         return boto3.Session(region_name=region)
 
 def get_client(
-    service_name: str,
+    service_name: str, 
     region: Optional[str] = None,
-    profile: Optional[str] = None,
-    retry_attempts: int = 3
-) -> boto3.client:
-    """Get a cached boto3 client for the specified AWS service.
+    session_context: Optional[str] = None
+) -> Any:
+    """Get an AWS service client with optional cross-account session context.
     
     Args:
-        service_name: Name of the AWS service
-        region: AWS region name (overrides config)
-        profile: AWS profile name (overrides config)
-        retry_attempts: Number of retry attempts for AWS API calls
+        service_name: AWS service name (e.g., 'ec2', 'iam', 's3')
+        region: AWS region to use (defaults to config region)
+        session_context: Session key for cross-account access (e.g., "123456789012_aws_dev")
         
     Returns:
-        Cached boto3 client for the specified service
+        Configured AWS service client
     """
-    # Create cache key from parameters
-    region = region or config.aws.aws_region
-    profile = profile or config.aws.aws_profile
-    cache_key = f"{service_name}:{region}:{profile}:{retry_attempts}"
+    session = get_aws_session(region=region, session_context=session_context)
+    return session.client(service_name)
+
+def get_available_sessions() -> Dict[str, Dict[str, Any]]:
+    """Get information about available cross-account sessions.
     
-    # Clean up expired clients periodically
-    _cleanup_expired_clients()
-    
-    # Check if client exists in cache and is not expired
-    current_time = time.time()
-    with _cache_lock:
-        if cache_key in _client_cache:
-            client, timestamp = _client_cache[cache_key]
-            if current_time - timestamp < _cache_max_age:
-                return client
-            else:
-                # Remove expired client
-                del _client_cache[cache_key]
-        
-        # Create new client if not in cache or expired
-        session = get_aws_session(region, profile)
-        
-        # Configure client with retries
-        boto_config = Config(
-            retries={"max_attempts": retry_attempts, "mode": "adaptive"},
-            user_agent_extra=f"AWSSecurityMCP/{config.aws.aws_region}",
-            max_pool_connections=50  # Increase connection pool size
-        )
-        
-        client = session.client(service_name, config=boto_config)
-        
-        # Cache the client with timestamp
-        _client_cache[cache_key] = (client, current_time)
-        logger.debug(f"Created and cached new {service_name} client for region {region}")
-        
-        return client
+    Returns:
+        Dict mapping session keys to session information
+    """
+    try:
+        from aws_security_mcp.services.credentials import get_session_info
+        return get_session_info()
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error getting session info: {e}")
+        return {}
 
 def clear_client_cache():
     """Clear the client cache. Useful for testing or credential rotation."""
