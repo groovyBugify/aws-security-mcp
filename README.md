@@ -5,11 +5,6 @@
 
 A Model Context Protocol (MCP) server that enables AI assistants to perform comprehensive AWS security analysis through natural language queries.
 
-## Demo
-
-[🎥 **Watch Demo Video**](https://github.com/groovyBugify/aws-security-mcp/raw/main/images/aws-security.mp4)
-
-*Watch AWS Security MCP in action: Cross-account resource discovery, security analysis, and threat modeling through natural language queries.*
 
 ## Overview
 
