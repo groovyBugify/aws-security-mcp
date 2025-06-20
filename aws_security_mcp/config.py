@@ -37,9 +37,30 @@ def load_yaml_config() -> Dict[str, Any]:
     # If no config file found, return minimal defaults (config.yaml should exist)
     logging.getLogger(__name__).warning("No config.yaml found, using minimal built-in defaults")
     return {
-        "aws": {"region": "ap-south-1"},
-        "server": {"host": "127.0.0.1", "port": 8000, "log_level": "info"},
-        "cross_account": {"role_name": "aws-security-mcp-cross-account-access"}
+        "aws": {
+            "region": "ap-south-1",
+            "profile": None
+        },
+        "server": {
+            "host": "127.0.0.1",
+            "port": 8000,
+            "log_level": "info",
+            "debug": False,
+            "minimal_logging": False,
+            "startup_quiet": True,
+            "tool_quiet": True,
+            "max_concurrent_requests": 10,
+            "client_cache_ttl": 3600
+        },
+        "cross_account": {
+            "role_name": "aws-security-mcp-cross-account-access",
+            "session_name": "aws-security-mcp-session",
+            "session_duration_seconds": 3600,
+            "refresh_threshold_minutes": 5,
+            "auto_setup_on_startup": True,
+            "auto_refresh_enabled": True,
+            "max_concurrent_assumptions": 5
+        }
     }
 
 class AWSConfig(BaseModel):

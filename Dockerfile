@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY aws_security_mcp/ ./aws_security_mcp/
 COPY run_aws_security.sh .
+COPY config.yaml .
 
 # Make the script executable
 RUN chmod +x run_aws_security.sh
