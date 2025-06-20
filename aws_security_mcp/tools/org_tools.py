@@ -69,76 +69,125 @@ async def get_org_hierarchy_async() -> Dict[str, Any]:
         return {}
 
 @register_tool()
-async def details_aws_account(account_id: Optional[str] = None, account_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+async def details_aws_account(
+    account_id: Optional[str] = None, 
+    account_ids: Optional[List[str]] = None,
+    include_policies: bool = False,
+    status_filter: str = "ACTIVE"
+) -> Dict[str, Any]:
     """Fetch details about AWS accounts in the organization.
 
     Args:
         account_id: Optional single account ID to fetch details for
         account_ids: Optional list of account IDs to fetch details for
+        include_policies: Whether to include effective policies (expensive operation)
+        status_filter: Account status to filter by (ACTIVE, SUSPENDED, ALL)
 
     Returns:
-        Dict containing account details
+        Dict containing account details with counts and optionally policies
     """
     try:
-        logger.info(f"Fetching AWS account details")
+        logger.info(f"Fetching AWS account details with status_filter={status_filter}, include_policies={include_policies}")
         
-        accounts_to_fetch = []
+        # Get account counts first
+        account_counts = await organizations.run_in_executor(organizations.get_account_counts)
         
-        # If both parameters are None, fetch all accounts
-        if account_id is None and account_ids is None:
-            logger.info("No account IDs specified, fetching all accounts")
-            all_accounts = organizations.list_accounts()
-            accounts_to_fetch = [account.get('Id') for account in all_accounts if account.get('Id')]
+        accounts_to_process = []
         
-        # If single account_id is provided
-        elif account_id is not None:
-            accounts_to_fetch = [account_id]
-        
-        # If account_ids list is provided
+        # Determine which accounts to fetch
+        if account_id is not None:
+            # Single account - get its details directly
+            account_detail = await organizations.run_in_executor(organizations.get_account_details, account_id)
+            if account_detail and (status_filter == "ALL" or account_detail.get('Status') == status_filter):
+                accounts_to_process = [account_detail]
         elif account_ids is not None:
-            accounts_to_fetch = account_ids
+            # Multiple specific accounts
+            async def get_single_account(acc_id: str):
+                try:
+                    return await organizations.run_in_executor(organizations.get_account_details, acc_id)
+                except Exception as e:
+                    logger.error(f"Error getting account {acc_id}: {str(e)}")
+                    return None
+            
+            tasks = [get_single_account(acc_id) for acc_id in account_ids]
+            results = await asyncio.gather(*tasks)
+            
+            # Filter by status
+            for account_detail in results:
+                if account_detail and (status_filter == "ALL" or account_detail.get('Status') == status_filter):
+                    accounts_to_process.append(account_detail)
+        else:
+            # No specific accounts - get all accounts with status filtering
+            if status_filter == "ACTIVE":
+                accounts_to_process = await organizations.run_in_executor(organizations.list_active_accounts)
+            elif status_filter == "ALL":
+                accounts_to_process = await organizations.run_in_executor(organizations.list_accounts)
+            else:
+                # Other status filters
+                all_accounts = await organizations.run_in_executor(organizations.list_accounts)
+                accounts_to_process = [acc for acc in all_accounts if acc.get('Status') == status_filter]
         
-        # Get details for each account
+        # Format account details
         account_details = {}
         policies_by_account = {}
         
-        # Process accounts in parallel using asyncio
-        async def get_account_with_policies(acc_id: str):
-            try:
-                # Get basic account details
-                account_detail = await organizations.run_in_executor(organizations.get_account_details, acc_id)
+        # Process accounts efficiently
+        for account in accounts_to_process:
+            if not account:
+                continue
                 
-                # Get effective policies
-                policies = await organizations.run_in_executor(organizations.get_effective_policies_for_account, acc_id)
+            account_id = account.get('Id')
+            if not account_id:
+                continue
                 
-                return acc_id, account_detail, policies
-            except Exception as e:
-                logger.error(f"Error getting details for account {acc_id}: {str(e)}")
-                return acc_id, {}, {}
+            # Always include basic account details
+            account_details[account_id] = org_formatter.format_account_simple(account)
         
-        # Create tasks for all accounts
-        tasks = [get_account_with_policies(acc_id) for acc_id in accounts_to_fetch]
-        results = await asyncio.gather(*tasks)
+        # Only fetch policies if explicitly requested (expensive operation)
+        if include_policies and account_details:
+            logger.info(f"Fetching effective policies for {len(account_details)} accounts (this may take time)")
+            
+            async def get_account_policies(acc_id: str):
+                try:
+                    policies = await organizations.run_in_executor(organizations.get_effective_policies_for_account, acc_id)
+                    return acc_id, policies
+                except Exception as e:
+                    logger.error(f"Error getting policies for account {acc_id}: {str(e)}")
+                    return acc_id, {}
+            
+            # Process policies in parallel
+            policy_tasks = [get_account_policies(acc_id) for acc_id in account_details.keys()]
+            policy_results = await asyncio.gather(*policy_tasks)
+            
+            for acc_id, policies in policy_results:
+                if policies:
+                    policies_by_account[acc_id] = org_formatter.format_effective_policies(policies)
         
-        # Process results
-        for acc_id, account_detail, policies in results:
-            if account_detail:
-                account_details[acc_id] = org_formatter.format_account_simple(account_detail)
-                policies_by_account[acc_id] = org_formatter.format_effective_policies(policies)
-        
-        return {
+        # Build response
+        response = {
             "accounts": account_details,
-            "effective_policies": policies_by_account,
-            "count": len(account_details),
+            "account_counts": account_counts,
+            "filtered_count": len(account_details),
+            "status_filter": status_filter,
+            "policies_included": include_policies,
             "scan_timestamp": datetime.utcnow().isoformat()
         }
+        
+        # Only include policies section if requested
+        if include_policies:
+            response["effective_policies"] = policies_by_account
+        
+        logger.info(f"Successfully fetched details for {len(account_details)} accounts")
+        return response
     
     except Exception as e:
         logger.error(f"Error fetching AWS account details: {str(e)}")
         return {
             "accounts": {},
-            "effective_policies": {},
-            "count": 0,
+            "account_counts": {},
+            "filtered_count": 0,
+            "status_filter": status_filter,
+            "policies_included": include_policies,
             "scan_timestamp": datetime.utcnow().isoformat(),
             "error": str(e)
         }

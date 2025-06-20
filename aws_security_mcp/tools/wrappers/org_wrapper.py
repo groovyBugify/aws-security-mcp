@@ -39,14 +39,20 @@ async def organizations_security_operations(operation: str, **params) -> str:
     🏢 Get organization overview:
     operation="fetch_organization"
     
-    👥 Get all account details:
+    👥 Get ACTIVE account details (fast, optimized):
     operation="get_account_details"
+    
+    👥 Get all accounts with policies (slower):
+    operation="get_account_details", include_policies=True, status_filter="ALL"
     
     🔍 Get specific account details:
     operation="get_account_details", account_id="123456789012"
     
-    📋 Get multiple account details:
-    operation="get_account_details", account_ids=["123456789012", "210987654321"]
+    📋 Get multiple account details with policies:
+    operation="get_account_details", account_ids=["123456789012", "210987654321"], include_policies=True
+    
+    🚫 Get suspended accounts:
+    operation="get_account_details", status_filter="SUSPENDED"
     
     🛡️ Get organization controls:
     operation="fetch_org_controls"
@@ -60,6 +66,8 @@ async def organizations_security_operations(operation: str, **params) -> str:
         # Account parameters:
         account_id: Single AWS account ID to fetch details for
         account_ids: List of AWS account IDs to fetch details for
+        include_policies: Whether to include effective policies (slower but comprehensive)
+        status_filter: Account status filter ("ACTIVE", "SUSPENDED", "ALL")
         
         # Policy parameters:
         policy_id: SCP policy ID to fetch detailed information for
@@ -81,10 +89,14 @@ async def organizations_security_operations(operation: str, **params) -> str:
         elif operation == "get_account_details":
             account_id = params.get("account_id")
             account_ids = params.get("account_ids")
+            include_policies = params.get("include_policies", False)
+            status_filter = params.get("status_filter", "ACTIVE")
             
             return json.dumps(await _details_aws_account(
                 account_id=account_id,
-                account_ids=account_ids
+                account_ids=account_ids,
+                include_policies=include_policies,
+                status_filter=status_filter
             ))
             
         elif operation == "fetch_org_controls":
@@ -173,19 +185,23 @@ async def discover_organizations_operations() -> str:
                     "parameters": {
                         "account_id": {"type": "str", "description": "Single AWS account ID to fetch details for"},
                         "account_ids": {"type": "list", "description": "List of AWS account IDs to fetch details for"},
-                        "note": "If neither parameter is provided, details for all accounts will be fetched"
+                        "include_policies": {"type": "bool", "default": False, "description": "Include effective policies (slower operation)"},
+                        "status_filter": {"type": "str", "default": "ACTIVE", "description": "Account status filter (ACTIVE, SUSPENDED, ALL)"},
+                        "note": "By default, only ACTIVE accounts are returned without policies for optimal performance"
                     },
                     "examples": [
                         "organizations_security_operations(operation='get_account_details')",
                         "organizations_security_operations(operation='get_account_details', account_id='123456789012')",
-                        "organizations_security_operations(operation='get_account_details', account_ids=['123456789012', '210987654321'])"
+                        "organizations_security_operations(operation='get_account_details', account_ids=['123456789012', '210987654321'])",
+                        "organizations_security_operations(operation='get_account_details', include_policies=True, status_filter='ALL')",
+                        "organizations_security_operations(operation='get_account_details', status_filter='SUSPENDED')"
                     ],
                     "returns": [
-                        "Account basic information (ID, name, email, status)",
-                        "Account creation date and join method",
-                        "Effective policies applied to each account",
-                        "Policy inheritance from organizational units",
-                        "Account-specific policy attachments"
+                        "Account basic information (ID, name, email, status, join date)",
+                        "Account counts by status (ACTIVE, SUSPENDED, TOTAL)",
+                        "Filtered count based on status_filter",
+                        "Effective policies (only if include_policies=True)",
+                        "Performance optimization: policies excluded by default"
                     ]
                 }
             },
@@ -227,17 +243,26 @@ async def discover_organizations_operations() -> str:
         "organizations_security_insights": {
             "common_operations": [
                 "Get organization overview: operation='fetch_organization'",
-                "Audit all accounts: operation='get_account_details'",
+                "Audit active accounts (fast): operation='get_account_details'",
+                "Full account audit with policies (slower): operation='get_account_details', include_policies=True, status_filter='ALL'",
                 "Review governance controls: operation='fetch_org_controls'",
                 "Analyze specific SCP: operation='get_scp_details', policy_id='p-xxx'"
             ],
+            "performance_optimization": [
+                "Default operation fetches only ACTIVE accounts without policies for speed",
+                "Use include_policies=True only when policy analysis is needed",
+                "Filter by status to reduce data transfer and processing time",
+                "Parallel processing for multiple accounts and policy fetching",
+                "Enhanced error handling for organizations with limited policy features"
+            ],
             "security_monitoring_patterns": [
-                "Regular audit of organizational structure and account relationships",
-                "Monitor Service Control Policy effectiveness and coverage",
-                "Track account creation and status changes",
+                "Regular audit of active accounts vs total accounts for anomaly detection",
+                "Monitor account status changes (ACTIVE to SUSPENDED)",
+                "Track Service Control Policy effectiveness and coverage",
                 "Review policy inheritance and effective permissions",
                 "Validate compliance with organizational governance standards",
-                "Monitor for unauthorized account creation or changes"
+                "Monitor for unauthorized account creation or status changes",
+                "Identify dormant or suspended accounts for cleanup"
             ],
             "governance_best_practices": [
                 "Implement least-privilege SCPs for account restrictions",

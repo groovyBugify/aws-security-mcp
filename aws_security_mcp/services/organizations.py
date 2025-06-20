@@ -264,10 +264,14 @@ def get_effective_policies_for_account(account_id: str) -> Dict[str, List[Dict[s
                     effective_policies[policy_type] = []
                 effective_policies[policy_type].append(response['EffectivePolicy'])
         except ClientError as e:
-            # Some policy types might not be enabled, which is expected
+            # Handle various policy-related errors gracefully
             error_code = e.response.get('Error', {}).get('Code')
             if error_code == 'PolicyTypeNotEnabledException':
                 logger.info(f"Policy type {policy_type} not enabled for account {account_id}")
+            elif error_code == 'InvalidInputException':
+                logger.info(f"Policy type {policy_type} invalid or not supported for account {account_id}")
+            elif error_code == 'TargetNotFoundException':
+                logger.warning(f"Account {account_id} not found when getting {policy_type}")
             else:
                 logger.error(f"Error getting effective {policy_type} for account {account_id}: {str(e)}")
     
@@ -338,4 +342,44 @@ def build_ou_hierarchy(ou_id: str, ou_name: str) -> Dict[str, Any]:
     accounts = list_accounts_for_parent(ou_id)
     hierarchy['Accounts'] = accounts
     
-    return hierarchy 
+    return hierarchy
+
+def list_active_accounts() -> List[Dict[str, Any]]:
+    """List only ACTIVE accounts in the AWS Organization.
+    
+    Returns:
+        List of active accounts in the organization
+    """
+    try:
+        all_accounts = list_accounts()
+        # Filter for only ACTIVE accounts
+        active_accounts = [account for account in all_accounts if account.get('Status') == 'ACTIVE']
+        
+        logger.info(f"Found {len(active_accounts)} active accounts out of {len(all_accounts)} total accounts")
+        return active_accounts
+    except Exception as e:
+        logger.error(f"Error listing active accounts: {str(e)}")
+        return []
+
+def get_account_counts() -> Dict[str, int]:
+    """Get account counts by status.
+    
+    Returns:
+        Dictionary with account counts by status
+    """
+    try:
+        all_accounts = list_accounts()
+        counts = {}
+        
+        # Count accounts by status
+        for account in all_accounts:
+            status = account.get('Status', 'UNKNOWN')
+            counts[status] = counts.get(status, 0) + 1
+        
+        # Add total count
+        counts['TOTAL'] = len(all_accounts)
+        
+        return counts
+    except Exception as e:
+        logger.error(f"Error getting account counts: {str(e)}")
+        return {'TOTAL': 0} 

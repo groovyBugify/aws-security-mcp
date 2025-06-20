@@ -57,7 +57,7 @@ athena:
   # Default S3 bucket for Athena query results
   # IMPORTANT: This bucket must exist and your MCP server must have read/write access
   # Format: s3://your-athena-results-bucket/path/ (must end with /)
-  default_output_location: "s3://mcp-athena-results-YOUR-ACCOUNT-ID-YOUR-REGION/"
+  default_output_location: "s3://aws-security-mcp-athena-results/"
   
   # Default workgroup for Athena queries
   default_workgroup: "primary"

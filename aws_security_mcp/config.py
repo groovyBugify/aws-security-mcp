@@ -60,11 +60,6 @@ def load_yaml_config() -> Dict[str, Any]:
             "auto_setup_on_startup": True,
             "auto_refresh_enabled": True,
             "max_concurrent_assumptions": 5
-        },
-        "athena": {
-            "default_output_location": "s3://mcp-athena-results-change-this-bucket/",
-            "default_workgroup": "primary",
-            "default_catalog": "AwsDataCatalog"
         }
     }
 
