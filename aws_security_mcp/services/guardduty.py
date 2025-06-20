@@ -280,6 +280,98 @@ def get_findings(
         return []
 
 
+def get_findings_statistics(
+    detector_id: Optional[str] = None,
+    finding_statistic_types: Optional[List[str]] = None,
+    group_by: Optional[str] = None,
+    finding_criteria: Optional[Dict[str, Any]] = None,
+    order_by: Optional[str] = None,
+    max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
+    **kwargs: Any
+) -> Optional[Dict[str, Any]]:
+    """Get official AWS-calculated statistics for GuardDuty findings.
+    
+    Args:
+        detector_id: GuardDuty detector ID (if None, gets the first detector)
+        finding_statistic_types: Types of statistics to retrieve (e.g., ['COUNT_BY_SEVERITY'])
+        group_by: Group statistics by one of: ACCOUNT, DATE, FINDING_TYPE, RESOURCE, SEVERITY
+        finding_criteria: Criteria to filter findings for statistics
+        order_by: Sort order: ASC or DESC (only with group_by)
+        max_results: Maximum results to return (only with group_by, default 25, max 100)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        **kwargs: Additional arguments to pass to the get_findings_statistics API call
+        
+    Returns:
+        Optional[Dict[str, Any]]: Official AWS findings statistics or None if error
+        
+    Note:
+        You must provide either finding_statistic_types OR group_by parameter, but not both.
+        The order_by and max_results parameters can only be used with group_by.
+    """
+    # Get detector ID if not provided
+    if detector_id is None:
+        detector_id = get_detector_id(session_context=session_context)
+        if detector_id is None:
+            return None
+    
+    client = get_guardduty_client(session_context=session_context)
+    
+    # Validate parameters
+    if finding_statistic_types and group_by:
+        logger.error("Cannot provide both finding_statistic_types and group_by parameters")
+        return None
+        
+    if not finding_statistic_types and not group_by:
+        logger.error("Must provide either finding_statistic_types or group_by parameter")
+        return None
+    
+    if (order_by or max_results) and not group_by:
+        logger.error("order_by and max_results can only be used with group_by parameter")
+        return None
+    
+    # Set up parameters
+    params = {
+        'DetectorId': detector_id,
+        **kwargs
+    }
+    
+    if finding_statistic_types:
+        params['FindingStatisticTypes'] = finding_statistic_types
+    
+    if group_by:
+        params['GroupBy'] = group_by
+        
+        if order_by:
+            params['OrderBy'] = order_by
+            
+        if max_results:
+            params['MaxResults'] = min(100, max_results)  # API max is 100
+    
+    if finding_criteria:
+        params['FindingCriteria'] = finding_criteria
+    
+    try:
+        response = client.get_findings_statistics(**params)
+        
+        # Add the DetectorId to the response for consistency
+        statistics = response.copy()
+        statistics['DetectorId'] = detector_id
+        
+        return statistics
+    
+    except NoCredentialsError:
+        logger.error(f"AWS credentials not found for getting GuardDuty findings statistics for detector {detector_id}")
+        return None
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        logger.error(f"AWS API error getting GuardDuty findings statistics for detector {detector_id}: {error_code} - {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error getting GuardDuty findings statistics for detector {detector_id}: {e}")
+        return None
+
+
 def list_ip_sets(
     detector_id: Optional[str] = None,
     max_results: int = 50,

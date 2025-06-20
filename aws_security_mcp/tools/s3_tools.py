@@ -198,9 +198,10 @@ async def find_public_buckets(session_context: Optional[str] = None) -> Dict[str
         Dict containing assessment of public buckets
     """
     try:
-        logger.info("Finding public S3 buckets")
+        logger.info(f"Finding public S3 buckets with session_context: {session_context is not None}")
         
-        # First list all buckets to ensure we get the full list
+        # First list all buckets to ensure we get the full list and validate access
+        logger.debug("Listing all buckets first to validate access...")
         all_buckets = s3.list_buckets(session_context=session_context)
         if not all_buckets:
             logger.warning("No S3 buckets found in the account or unable to list buckets")
@@ -218,8 +219,28 @@ async def find_public_buckets(session_context: Optional[str] = None) -> Dict[str
                 }
             }
         
+        logger.info(f"Found {len(all_buckets)} buckets, starting public bucket scan...")
+        
         # Get public buckets from the service
         public_buckets_data = s3.find_public_buckets(session_context=session_context)
+        
+        # Check for errors in the scan
+        if 'error' in public_buckets_data:
+            logger.error(f"Error during public bucket scan: {public_buckets_data['error']}")
+            return {
+                "assessment": {
+                    "error": public_buckets_data['error'],
+                    "summary": {
+                        "total_buckets": len(all_buckets),
+                        "public_buckets": 0,
+                        "percentage_public": 0,
+                        "account_protected": False,
+                        "scan_timestamp": datetime.utcnow().isoformat()
+                    },
+                    "public_buckets": [],
+                    "all_buckets": [s3_formatter.format_bucket_simple(bucket) for bucket in all_buckets]
+                }
+            }
         
         # Format the public buckets assessment
         formatted_assessment = s3_formatter.format_public_buckets_assessment(public_buckets_data)
@@ -229,6 +250,8 @@ async def find_public_buckets(session_context: Optional[str] = None) -> Dict[str
             formatted_assessment["all_buckets"] = [
                 s3_formatter.format_bucket_simple(bucket) for bucket in all_buckets
             ]
+        
+        logger.info(f"Public bucket scan completed. Found {formatted_assessment.get('summary', {}).get('public_buckets', 0)} public buckets")
         
         return {
             "assessment": formatted_assessment

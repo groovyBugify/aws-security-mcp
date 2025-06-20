@@ -327,6 +327,20 @@ def format_bucket_details(bucket_details: Dict[str, Any]) -> Dict[str, Any]:
                 'enabled': False
             }
         
+        # Format tags
+        tagging = bucket_details.get('Tagging', {})
+        if tagging and 'TagSet' in tagging:
+            tag_list = tagging.get('TagSet', [])
+            formatted_tags = {}
+            for tag in tag_list:
+                key = tag.get('Key')
+                value = tag.get('Value')
+                if key:
+                    formatted_tags[key] = value
+            formatted['tags'] = formatted_tags
+        else:
+            formatted['tags'] = {}
+        
         # Add security rating
         formatted['security_rating'] = calculate_security_rating(bucket_details)
         

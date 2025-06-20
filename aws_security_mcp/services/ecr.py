@@ -146,7 +146,34 @@ async def get_repository_scan_findings(repository_name: str, image_tag: str = 'l
         # Process paginated findings
         all_findings = []
         current_findings = scan_findings.get('imageScanFindings', {}).get('findings', [])
-        all_findings.extend(current_findings)
+        
+        # Filter findings to only include essential information
+        for finding in current_findings:
+            filtered_finding = {
+                "cve_id": finding.get('name'),
+                "severity": finding.get('severity'),
+                "package_name": None,
+                "package_version": None,
+                "cvss3_score": None,
+                "cvss3_vector": None,
+                "uri": finding.get('uri')
+            }
+            
+            # Extract package info and CVSS scores from attributes
+            for attr in finding.get('attributes', []):
+                key = attr.get('key')
+                value = attr.get('value')
+                
+                if key == 'package_name':
+                    filtered_finding['package_name'] = value
+                elif key == 'package_version':
+                    filtered_finding['package_version'] = value
+                elif key == 'CVSS3_SCORE':
+                    filtered_finding['cvss3_score'] = value
+                elif key == 'CVSS3_VECTOR':
+                    filtered_finding['cvss3_vector'] = value
+            
+            all_findings.append(filtered_finding)
         
         while 'nextToken' in scan_findings:
             next_token = scan_findings['nextToken']
@@ -156,7 +183,34 @@ async def get_repository_scan_findings(repository_name: str, image_tag: str = 'l
                 nextToken=next_token
             )
             current_findings = scan_findings.get('imageScanFindings', {}).get('findings', [])
-            all_findings.extend(current_findings)
+            
+            # Filter findings for paginated results too
+            for finding in current_findings:
+                filtered_finding = {
+                    "cve_id": finding.get('name'),
+                    "severity": finding.get('severity'),
+                    "package_name": None,
+                    "package_version": None,
+                    "cvss3_score": None,
+                    "cvss3_vector": None,
+                    "uri": finding.get('uri')
+                }
+                
+                # Extract package info and CVSS scores from attributes
+                for attr in finding.get('attributes', []):
+                    key = attr.get('key')
+                    value = attr.get('value')
+                    
+                    if key == 'package_name':
+                        filtered_finding['package_name'] = value
+                    elif key == 'package_version':
+                        filtered_finding['package_version'] = value
+                    elif key == 'CVSS3_SCORE':
+                        filtered_finding['cvss3_score'] = value
+                    elif key == 'CVSS3_VECTOR':
+                        filtered_finding['cvss3_vector'] = value
+                
+                all_findings.append(filtered_finding)
         
         # Get vulnerability counts by severity
         severity_counts = scan_findings.get('imageScanFindings', {}).get('findingSeverityCounts', {})
@@ -284,18 +338,36 @@ async def search_repositories(repository_name: Optional[str] = None, repository_
                 return all_repositories_result
             matching_repositories = all_repositories_result.get("repositories", [])
         
-        # Get additional details for each repository
+        # Get additional details for each repository using the same client
         detailed_repositories = []
         for repo in matching_repositories:
             repo_name = repo.get('repositoryName')
             
-            # Get repository policy
-            policy_result = await get_repository_policy(repo_name, session_context=session_context)
-            repo_policy = policy_result.get("policy")
+            # Get repository policy using the same client (inline the logic)
+            repo_policy = None
+            try:
+                policy_response = client.get_repository_policy(
+                    repositoryName=repo_name
+                )
+                repo_policy = policy_response.get('policyText', '{}')
+            except ClientError as e:
+                error_code = getattr(e, 'response', {}).get('Error', {}).get('Code')
+                # Policy not found is not an error for our purposes
+                if error_code != 'RepositoryPolicyNotFoundException':
+                    logger.error(f"Error retrieving ECR repository policy for {repo_name}: {str(e)}")
             
-            # Get repository images
-            images_result = await get_repository_images(repo_name, session_context=session_context)
-            repo_images = images_result.get("images", [])
+            # Get repository images using the same client (inline the logic)
+            repo_images = []
+            try:
+                # Use paginator to handle pagination
+                paginator = client.get_paginator('describe_images')
+                
+                # Iterate through pages
+                for page in paginator.paginate(repositoryName=repo_name):
+                    images = page.get('imageDetails', [])
+                    repo_images.extend(images)
+            except ClientError as e:
+                logger.error(f"Error retrieving ECR repository images for {repo_name}: {str(e)}")
             
             # Create detailed repository info
             detailed_repo = {

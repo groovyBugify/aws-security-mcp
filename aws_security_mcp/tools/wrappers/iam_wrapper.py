@@ -19,7 +19,8 @@ from aws_security_mcp.tools.iam_tools import (
     list_iam_users as _list_iam_users,
     find_access_key as _find_access_key,
     get_iam_policy_details as _get_iam_policy_details,
-    get_iam_policy_batch as _get_iam_policy_batch
+    get_iam_policy_batch as _get_iam_policy_batch,
+    list_active_access_keys as _list_active_access_keys
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ async def iam_security_operations(operation: str, session_context: Optional[str]
     
     🔑 ACCESS KEY MANAGEMENT:
     - find_access_key: Find details about an IAM access key including associated user
+    - list_active_access_keys: List all active access keys across all users with count and details
     
     📋 POLICY MANAGEMENT:
     - get_policy_details: Get detailed information about a specific IAM policy
@@ -81,6 +83,15 @@ async def iam_security_operations(operation: str, session_context: Optional[str]
     🔑 Find access key details:
     operation="find_access_key", access_key_id="AKIAIOSFODNN7EXAMPLE"
     
+    🔑 List all active access keys:
+    operation="list_active_access_keys"
+    
+    🔑 List active access keys without last used info:
+    operation="list_active_access_keys", include_last_used=False
+    
+    🔑 Fast mode - count only (fastest for large accounts):
+    operation="list_active_access_keys", fast_mode=True
+    
     📋 Get policy details:
     operation="get_policy_details", policy_arn="arn:aws:iam::123456789012:policy/MyPolicy"
     
@@ -107,6 +118,8 @@ async def iam_security_operations(operation: str, session_context: Optional[str]
         
         # Access key parameters:
         access_key_id: The access key ID to search for
+        include_last_used: Whether to include last used information for access keys (default: True)
+        fast_mode: If True, returns only counts for fastest response (good for large accounts)
         
         # Policy parameters:
         policy_arn: The ARN of the policy to retrieve
@@ -238,11 +251,21 @@ async def iam_security_operations(operation: str, session_context: Optional[str]
                 session_context=session_context
             ))
             
+        elif operation == "list_active_access_keys":
+            include_last_used = params.get("include_last_used", True)
+            fast_mode = params.get("fast_mode", False)
+            return safe_json_dumps(await _list_active_access_keys(
+                include_last_used=include_last_used,
+                fast_mode=fast_mode,
+                session_context=session_context
+            ))
+            
         else:
             # Provide helpful error with available operations
             available_operations = [
                 "find_user", "list_users", "find_role", "list_roles",
-                "find_access_key", "get_policy_details", "get_policy_batch"
+                "find_access_key", "get_policy_details", "get_policy_batch",
+                "list_active_access_keys"
             ]
             
             return safe_json_dumps({
@@ -255,7 +278,8 @@ async def iam_security_operations(operation: str, session_context: Optional[str]
                     "list_roles": "operation='list_roles', names_only=True",
                     "find_access_key": "operation='find_access_key', access_key_id='AKIAIOSFODNN7EXAMPLE'",
                     "get_policy_details": "operation='get_policy_details', policy_arn='arn:aws:iam::123456789012:policy/MyPolicy'",
-                    "get_policy_batch": "operation='get_policy_batch', policy_arns=['arn1', 'arn2']"
+                    "get_policy_batch": "operation='get_policy_batch', policy_arns=['arn1', 'arn2']",
+                    "list_active_access_keys": "operation='list_active_access_keys'"
                 }
             })
             
@@ -365,6 +389,20 @@ async def discover_iam_operations() -> str:
                         "iam_security_operations(operation='find_access_key', access_key_id='AKIAIOSFODNN7EXAMPLE')",
                         "iam_security_operations(operation='find_access_key', access_key_id='AKIA1234567890ABCDEF')"
                     ]
+                },
+                "list_active_access_keys": {
+                    "description": "List all active access keys across all users in the AWS account with count and usage details",
+                    "parameters": {
+                        "include_last_used": {"type": "bool", "default": True, "description": "Whether to include last used information for each key"},
+                        "format_response": {"type": "bool", "default": True, "description": "Whether to format response for security analysis"},
+                        "fast_mode": {"type": "bool", "default": False, "description": "If True, returns only counts for fastest response (ideal for large accounts)"}
+                    },
+                    "examples": [
+                        "iam_security_operations(operation='list_active_access_keys')",
+                        "iam_security_operations(operation='list_active_access_keys', include_last_used=False)",
+                        "iam_security_operations(operation='list_active_access_keys', fast_mode=True)",
+                        "iam_security_operations(operation='list_active_access_keys', format_response=False)"
+                    ]
                 }
             },
             "policy_analysis": {
@@ -401,7 +439,8 @@ async def discover_iam_operations() -> str:
                 "List all roles: operation='list_roles', names_only=True",
                 "Find specific user: operation='find_user', user_name='username'",
                 "Find specific role: operation='find_role', role_name='rolename'",
-                "Analyze access key: operation='find_access_key', access_key_id='AKIA...'"
+                "Analyze access key: operation='find_access_key', access_key_id='AKIA...'",
+                "List all active access keys: operation='list_active_access_keys'"
             ],
             "security_monitoring_patterns": [
                 "Audit user permissions and group memberships",
@@ -450,7 +489,10 @@ async def discover_iam_operations() -> str:
                 "Implement pagination for large result sets",
                 "Use batch operations for multiple policy analyses",
                 "Cache frequently accessed policy details",
-                "Filter results using path_prefix when possible"
+                "Filter results using path_prefix when possible",
+                "Use fast_mode=True for access key counts in large accounts (100+ users)",
+                "Set include_last_used=False when last usage data is not needed",
+                "Use concurrent processing for bulk operations"
             ]
         }
     }

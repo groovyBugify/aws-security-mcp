@@ -345,11 +345,12 @@ async def discover_route53_operations(session_context: Optional[str] = None) -> 
                         "route53_security_operations(operation='find_ip_details', ip_address='43.205.186.36')"
                     ],
                     "returns": [
-                        "Associated EC2 instances and network interfaces",
+                        "Comprehensive AWS resource identification (EC2, ELB, RDS, Lambda, NAT Gateway, ECS, etc.)",
                         "Route53 DNS records pointing to the IP",
-                        "Security group configurations and open ports",
-                        "VPC and subnet information",
-                        "Resource tags and metadata"
+                        "Security group configurations and network interface details",
+                        "VPC and subnet information with resource ownership",
+                        "Resource tags and metadata for all associated services",
+                        "Complete resource type classification and descriptions"
                     ]
                 },
                 "analyze_domain_security": {
@@ -437,10 +438,12 @@ async def discover_route53_operations(session_context: Optional[str] = None) -> 
                 "Risk-based security recommendations"
             ],
             "ip_address_intelligence": [
-                "AWS resource association and ownership validation",
+                "Comprehensive AWS resource association and ownership validation",
+                "Multi-service resource type identification (EC2, ELB, RDS, Lambda, NAT Gateway, ECS)",
                 "Security group and network ACL analysis",
                 "Route53 record correlation and mapping",
-                "Geographic and network-based risk assessment"
+                "Geographic and network-based risk assessment",
+                "Resource relationship mapping and dependency analysis"
             ]
         },
         "automation_opportunities": [

@@ -748,9 +748,9 @@ async def find_ip_address_details(ip_address: str, session_context: Optional[str
     """Find details about an IP address, including associated EC2 resources and DNS records pointing to it.
     
     This function:
-    1. Identifies EC2 instances with this IP (public or private)
-    2. Finds network interfaces using this IP
-    3. Searches Route53 records pointing to this IP
+    1. Uses the comprehensive EC2 resource lookup to identify all AWS resources with this IP
+    2. Searches Route53 records pointing to this IP
+    3. Combines the results for a complete picture
     
     Args:
         ip_address: The IP address to lookup (e.g., 43.205.186.36)
@@ -761,117 +761,27 @@ async def find_ip_address_details(ip_address: str, session_context: Optional[str
     """
     logger.info(f"Looking up details for IP address: {ip_address}")
     
-    result = {
-        "ip_address": ip_address,
-        "ec2_instances": [],
-        "network_interfaces": [],
-        "route53_records": [],
-        "summary": ""
-    }
-    
     try:
-        # Check for EC2 instances with this IP
-        instances = []
-        try:
-            # Look for instances with this public IP
-            instances.extend(ec2.describe_instances(filters=[
-                {"Name": "public-ip", "Values": [ip_address]}
-            ], session_context=session_context))
-            
-            # Also check for instances with this private IP
-            instances.extend(ec2.describe_instances(filters=[
-                {"Name": "private-ip-address", "Values": [ip_address]}
-            ], session_context=session_context))
-            
-            # Deduplicate instances
-            seen_ids = set()
-            unique_instances = []
-            for instance in instances:
-                instance_id = instance.get('InstanceId')
-                if instance_id and instance_id not in seen_ids:
-                    seen_ids.add(instance_id)
-                    
-                    # Extract relevant instance details
-                    instance_details = {
-                        "instance_id": instance_id,
-                        "state": instance.get('State', {}).get('Name', 'unknown'),
-                        "instance_type": instance.get('InstanceType'),
-                        "private_ip": instance.get('PrivateIpAddress'),
-                        "public_ip": instance.get('PublicIpAddress'),
-                        "vpc_id": instance.get('VpcId'),
-                        "subnet_id": instance.get('SubnetId'),
-                        "launch_time": str(instance.get('LaunchTime')) if instance.get('LaunchTime') else None,
-                    }
-                    
-                    # Add tags if available
-                    if 'Tags' in instance:
-                        instance_details["tags"] = {tag['Key']: tag['Value'] for tag in instance['Tags']}
-                    
-                    unique_instances.append(instance_details)
-            
-            result["ec2_instances"] = unique_instances
-            
-        except Exception as e:
-            logger.error(f"Error finding EC2 instances for IP {ip_address}: {e}")
-            result["ec2_instances_error"] = str(e)
+        # Import the EC2 tools function for comprehensive resource lookup
+        from aws_security_mcp.tools.ec2_tools import find_resource_by_ip
         
-        # Check for network interfaces with this IP
-        network_interfaces = []
-        try:
-            # Look for network interfaces with this IP
-            interfaces = ec2.describe_network_interfaces(filters=[
-                {"Name": "addresses.private-ip-address", "Values": [ip_address]}
-            ], session_context=session_context)
-            
-            # Also check for interfaces with public IP
-            public_interfaces = ec2.describe_network_interfaces(filters=[
-                {"Name": "association.public-ip", "Values": [ip_address]}
-            ], session_context=session_context)
-            
-            interfaces.extend(public_interfaces)
-            
-            # Deduplicate interfaces
-            seen_ids = set()
-            for interface in interfaces:
-                eni_id = interface.get('NetworkInterfaceId')
-                if eni_id and eni_id not in seen_ids:
-                    seen_ids.add(eni_id)
-                    
-                    # Extract relevant interface details
-                    interface_details = {
-                        "network_interface_id": eni_id,
-                        "status": interface.get('Status'),
-                        "description": interface.get('Description'),
-                        "vpc_id": interface.get('VpcId'),
-                        "subnet_id": interface.get('SubnetId'),
-                        "private_ip": interface.get('PrivateIpAddress'),
-                        "private_ips": [ip.get('PrivateIpAddress') for ip in interface.get('PrivateIpAddresses', [])],
-                    }
-                    
-                    # Add public IP if available
-                    association = interface.get('Association', {})
-                    if association and 'PublicIp' in association:
-                        interface_details["public_ip"] = association.get('PublicIp')
-                    
-                    # Add attachment info if available
-                    attachment = interface.get('Attachment', {})
-                    if attachment:
-                        interface_details["attachment"] = {
-                            "instance_id": attachment.get('InstanceId'),
-                            "device_index": attachment.get('DeviceIndex'),
-                            "status": attachment.get('Status'),
-                            "delete_on_termination": attachment.get('DeleteOnTermination')
-                        }
-                    
-                    network_interfaces.append(interface_details)
-            
-            result["network_interfaces"] = network_interfaces
-            
-        except Exception as e:
-            logger.error(f"Error finding network interfaces for IP {ip_address}: {e}")
-            result["network_interfaces_error"] = str(e)
+        # Get comprehensive EC2/AWS resource information using the existing function
+        ec2_result_str = await find_resource_by_ip(ip_address=ip_address, session_context=session_context)
+        ec2_result = json.loads(ec2_result_str)
         
-        # Find Route53 records pointing to this IP
+        # Start building our result with the EC2 data
+        result = {
+            "ip_address": ip_address,
+            "aws_resources": ec2_result.get("resources", []),
+            "route53_records": [],
+            "summary": ""
+        }
+        
+        # If there was an error in EC2 lookup, include it
+        if "error" in ec2_result:
+            result["aws_resources_error"] = ec2_result["error"]["message"]
+        
+        # Now add Route53 DNS record search
         try:
             # Get all hosted zones
             hosted_zones_response = route53.list_hosted_zones(max_items=100, session_context=session_context)
@@ -915,23 +825,20 @@ async def find_ip_address_details(ip_address: str, session_context: Optional[str
             logger.error(f"Error finding Route53 records for IP {ip_address}: {e}")
             result["route53_records_error"] = str(e)
         
-        # Create summary
-        ec2_count = len(result["ec2_instances"])
-        eni_count = len(result["network_interfaces"])
+        # Create comprehensive summary
+        aws_resource_count = len(result["aws_resources"])
         record_count = len(result["route53_records"])
         
         summary_parts = []
-        if ec2_count > 0:
-            summary_parts.append(f"Found {ec2_count} EC2 instance(s)")
-        if eni_count > 0:
-            summary_parts.append(f"Found {eni_count} network interface(s)")
+        if aws_resource_count > 0:
+            summary_parts.append(f"Found {aws_resource_count} AWS resource(s)")
         if record_count > 0:
             summary_parts.append(f"Found {record_count} Route53 record(s)")
             
         if summary_parts:
             result["summary"] = f"IP {ip_address}: " + ", ".join(summary_parts)
         else:
-            result["summary"] = f"IP {ip_address}: No associated AWS resources found"
+            result["summary"] = f"IP {ip_address}: No associated AWS resources or DNS records found"
         
         return json.dumps(result)
     except Exception as e:
@@ -1131,9 +1038,14 @@ async def analyze_domain_security(domain_name: str, session_context: Optional[st
         for ip in a_records_ips:
             try:
                 # Check for EC2 instances with this IP
-                instances = ec2.describe_instances(filters=[
-                    {"Name": "public-ip", "Values": [ip]}
+                response = ec2.describe_instances(filters=[
+                    {"Name": "ip-address", "Values": [ip]}
                 ], session_context=session_context)
+                
+                # Extract instances from reservations
+                instances = []
+                for reservation in response.get('Reservations', []):
+                    instances.extend(reservation.get('Instances', []))
                 
                 for instance in instances:
                     instance_id = instance.get('InstanceId')

@@ -69,7 +69,8 @@ async def validate_aws_credentials() -> Dict[str, Any]:
     Returns:
         Dict with validation results
     """
-    logger.info("🔐 Validating AWS credentials...")
+    if not config.server.startup_quiet:
+        logger.info("Validating AWS credentials...")
     
     try:
         from aws_security_mcp.services.base import get_client
@@ -78,8 +79,9 @@ async def validate_aws_credentials() -> Dict[str, Any]:
         sts_client = get_client('sts')
         identity = sts_client.get_caller_identity()
         
-        logger.info("✅ AWS credentials validated successfully")
-        logger.info(f"📋 Identity: Account={identity['Account']}, ARN={identity['Arn']}")
+        if not config.server.startup_quiet:
+            logger.info("AWS credentials validated successfully")
+            logger.debug(f"Identity: Account={identity['Account']}, ARN={identity['Arn']}")
         
         return {
             "success": True,
@@ -89,7 +91,7 @@ async def validate_aws_credentials() -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"❌ AWS credential validation failed: {e}")
+        logger.error(f"AWS credential validation failed: {e}")
         return {
             "success": False,
             "error": str(e)
@@ -102,7 +104,8 @@ async def initialize_cross_account_sessions() -> Dict[str, Any]:
         Dict with session initialization results
     """
     if not config.cross_account.auto_setup_on_startup:
-        logger.info("Cross-account auto-setup disabled, skipping session initialization")
+        if not config.server.startup_quiet:
+            logger.info("Cross-account auto-setup disabled, skipping session initialization")
         return {
             "success": True,
             "sessions_created": 0,
@@ -110,7 +113,8 @@ async def initialize_cross_account_sessions() -> Dict[str, Any]:
             "message": "Auto-setup disabled"
         }
     
-    logger.info("🔗 Initializing cross-account credential sessions...")
+    if not config.server.startup_quiet:
+        logger.info("Initializing cross-account credential sessions...")
     
     try:
         # Import the credentials service
@@ -124,27 +128,31 @@ async def initialize_cross_account_sessions() -> Dict[str, Any]:
             sessions_failed = result.get("sessions_failed", 0)
             accounts_processed = result.get("accounts_processed", 0)
             
-            logger.info(f"✅ Cross-account session initialization complete:")
-            logger.info(f"  📊 Accounts processed: {accounts_processed}")
-            logger.info(f"  ✅ Sessions created: {sessions_created}")
-            logger.info(f"  ❌ Sessions failed: {sessions_failed}")
+            if not config.server.startup_quiet:
+                if sessions_created > 0:
+                    logger.info(f"Multi-account access enabled for {sessions_created} accounts")
+                
+                if sessions_failed > 0:
+                    logger.warning(f"Failed to access {sessions_failed} accounts - check role permissions")
             
-            if sessions_created > 0:
-                logger.info(f"🎉 Multi-account access enabled for {sessions_created} accounts")
-            
-            if sessions_failed > 0:
-                logger.warning(f"⚠️ Failed to access {sessions_failed} accounts - check role permissions")
+            # Always log debug details
+            logger.debug(f"Cross-account session initialization complete:")
+            logger.debug(f"  Accounts processed: {accounts_processed}")
+            logger.debug(f"  Sessions created: {sessions_created}")
+            logger.debug(f"  Sessions failed: {sessions_failed}")
                 
             return result
         else:
             error = result.get("error", "Unknown error")
-            logger.warning(f"❌ Cross-account session initialization failed: {error}")
-            logger.info("💡 You can still set up sessions manually using credentials_security_operations")
+            logger.warning(f"Cross-account session initialization failed: {error}")
+            if not config.server.startup_quiet:
+                logger.info("You can still set up sessions manually using credentials_security_operations")
             return result
     
     except Exception as e:
-        logger.error(f"💥 Error during cross-account session initialization: {e}")
-        logger.info("💡 Cross-account access will not be available until sessions are set up manually")
+        logger.error(f"Error during cross-account session initialization: {e}")
+        if not config.server.startup_quiet:
+            logger.info("Cross-account access will not be available until sessions are set up manually")
         return {
             "success": False,
             "error": str(e),
@@ -158,7 +166,8 @@ async def setup_aws_environment() -> Dict[str, Any]:
     Returns:
         Dict with setup results and session information
     """
-    logger.info("🚀 Setting up AWS environment...")
+    if not config.server.startup_quiet:
+        logger.info("Setting up AWS environment...")
     
     # Step 1: Validate basic AWS credentials
     credential_validation = await validate_aws_credentials()
@@ -200,12 +209,13 @@ def register_tools_conditionally(aws_setup_result: Dict[str, Any]) -> None:
     credentials_valid = aws_setup_result.get("credentials_valid", False)
     sessions_available = aws_setup_result.get("sessions_available", False)
     
-    logger.info("🔧 Registering MCP tools with conditional registration...")
-    logger.info(f"  AWS credentials valid: {credentials_valid}")
-    logger.info(f"  Multi-account sessions available: {sessions_available}")
+    if not config.server.startup_quiet:
+        logger.info("Registering MCP tools...")
+        logger.debug(f"AWS credentials valid: {credentials_valid}")
+        logger.debug(f"Multi-account sessions available: {sessions_available}")
     
     if not credentials_valid:
-        logger.error("❌ Cannot register tools - AWS credentials are invalid")
+        logger.error("Cannot register tools - AWS credentials are invalid")
         return
     
     # List of tool modules to import
@@ -263,11 +273,11 @@ def register_tools_conditionally(aws_setup_result: Dict[str, Any]) -> None:
         except ImportError as e:
             logger.warning(f"Could not import {module_name}: {e}")
     
-    logger.info(f"📦 Imported {imported_count}/{len(tool_modules)} tool modules")
+    logger.debug(f"Imported {imported_count}/{len(tool_modules)} tool modules")
     
     # Get all available tools
     all_tools = get_all_tools()
-    logger.info(f"📋 Total available tools: {len(all_tools)}")
+    logger.debug(f"Total available tools: {len(all_tools)}")
     
     # Register tools conditionally
     registered_count = 0
@@ -281,7 +291,7 @@ def register_tools_conditionally(aws_setup_result: Dict[str, Any]) -> None:
         if tool_name in ["refresh_aws_session", "connected_aws_accounts", 
                         "aws_session_operations", "discover_aws_session_operations"]:
             if should_register:
-                logger.info(f"🔒 Registering safe credential tool: {tool_name}")
+                logger.debug(f"Registering safe credential tool: {tool_name}")
                 mcp.tool(name=tool_name)(tool_func)
                 registered_count += 1
                 safe_tools_count += 1
@@ -289,24 +299,27 @@ def register_tools_conditionally(aws_setup_result: Dict[str, Any]) -> None:
         
         # Register other tools based on registry and credential status
         if should_register:
-            logger.debug(f"✅ Registering tool: {tool_name}")
+            logger.debug(f"Registering tool: {tool_name}")
             mcp.tool(name=tool_name)(tool_func)
             registered_count += 1
         else:
-            logger.debug(f"❌ Excluding tool: {tool_name}")
+            logger.debug(f"Excluding tool: {tool_name}")
             excluded_count += 1
     
     # Log registration statistics
-    logger.info(f"📊 Tool Registration Summary:")
-    logger.info(f"  ✅ Registered: {registered_count}")
-    logger.info(f"  🔒 Safe credential tools: {safe_tools_count}")
-    logger.info(f"  ❌ Excluded: {excluded_count}")
-    logger.info(f"  🎯 Tool reduction: {len(all_tools)} → {registered_count}")
+    if not config.server.startup_quiet:
+        logger.info(f"Tool registration complete: {registered_count} tools registered")
+        if sessions_available:
+            logger.info(f"Multi-account tools available (sessions: {aws_setup_result.get('sessions_created', 0)})")
+        else:
+            logger.debug("Multi-account sessions not available - some tools may have limited functionality")
     
-    if sessions_available:
-        logger.info(f"🎉 Multi-account tools are available (sessions created: {aws_setup_result.get('sessions_created', 0)})")
-    else:
-        logger.warning("⚠️ Multi-account sessions not available - some tools may have limited functionality")
+    # Always log debug statistics
+    logger.debug(f"Tool Registration Summary:")
+    logger.debug(f"  Registered: {registered_count}")
+    logger.debug(f"  Safe credential tools: {safe_tools_count}")
+    logger.debug(f"  Excluded: {excluded_count}")
+    logger.debug(f"  Tool reduction: {len(all_tools)} → {registered_count}")
 
 # For FastAPI HTTP server mode (not used with Claude Desktop but kept for reference)
 app = FastAPI(
@@ -371,7 +384,8 @@ def run_sse_server() -> None:
         sys.exit(1)
     
     try:
-        logger.info("🚀 Starting AWS Security MCP SSE Server...")
+        if not config.server.startup_quiet:
+            logger.info("Starting AWS Security MCP SSE Server...")
         
         # Set up AWS environment and register tools conditionally
         import asyncio
@@ -380,11 +394,19 @@ def run_sse_server() -> None:
             register_tools_conditionally(aws_setup_result)
             
             if not aws_setup_result.get("success"):
-                logger.error("❌ AWS environment setup failed. Server will start with limited functionality.")
+                logger.error("AWS environment setup failed. Server will start with limited functionality.")
+            elif not config.server.startup_quiet:
+                # Show a clean startup summary
+                sessions_count = aws_setup_result.get('sessions_created', 0)
+                if sessions_count > 0:
+                    logger.info(f"AWS Security MCP ready: {sessions_count} accounts accessible")
+                else:
+                    logger.info("AWS Security MCP ready: Single account mode")
             
         except Exception as e:
-            logger.error(f"💥 Could not set up AWS environment: {e}")
-            logger.info("🔧 Starting server without AWS tools...")
+            logger.error(f"Could not set up AWS environment: {e}")
+            if not config.server.startup_quiet:
+                logger.info("Starting server without AWS tools...")
         
         # Create SSE app with health endpoint
         from starlette.applications import Starlette
@@ -406,10 +428,11 @@ def run_sse_server() -> None:
             ]
         )
         
-        logger.info("📡 SSE endpoint available at: /sse")
-        logger.info("🏥 Health check available at: /health")
-        logger.info(f"🔍 Use: npx @modelcontextprotocol/inspector http://127.0.0.1:8000/sse")
-        logger.info("⚠️  Note: Load balancer should be configured to not redirect /sse to /sse/")
+        if not config.server.startup_quiet:
+            logger.info("SSE endpoint available at: /sse")
+            logger.info("Health check available at: /health")
+            logger.info(f"Use: npx @modelcontextprotocol/inspector http://127.0.0.1:8000/sse")
+            logger.debug("Note: Load balancer should be configured to not redirect /sse to /sse/")
         
         # Run the combined app with uvicorn
         import uvicorn
@@ -417,7 +440,8 @@ def run_sse_server() -> None:
             app,
             host="0.0.0.0",
             port=8000,
-            log_level=config.server.log_level
+            log_level="warning" if config.server.minimal_logging else config.server.log_level,
+            access_log=not config.server.minimal_logging
         )
         
     except KeyboardInterrupt:
@@ -439,11 +463,19 @@ def run_http_app() -> None:
             register_tools_conditionally(aws_setup_result)
             
             if not aws_setup_result.get("success"):
-                logger.error("❌ AWS environment setup failed. Server will start with limited functionality.")
+                logger.error("AWS environment setup failed. Server will start with limited functionality.")
+            elif not config.server.startup_quiet:
+                # Show a clean startup summary
+                sessions_count = aws_setup_result.get('sessions_created', 0)
+                if sessions_count > 0:
+                    logger.info(f"AWS Security MCP ready: {sessions_count} accounts accessible")
+                else:
+                    logger.info("AWS Security MCP ready: Single account mode")
             
         except Exception as e:
-            logger.error(f"💥 Could not set up AWS environment: {e}")
-            logger.info("🔧 Starting server without AWS tools...")
+            logger.error(f"Could not set up AWS environment: {e}")
+            if not config.server.startup_quiet:
+                logger.info("Starting server without AWS tools...")
         
         # Start the HTTP server
         uvicorn.run(
@@ -451,6 +483,8 @@ def run_http_app() -> None:
             host="0.0.0.0",
             port=8000,
             reload=config.server.debug,
+            log_level="warning" if config.server.minimal_logging else config.server.log_level,
+            access_log=not config.server.minimal_logging
         )
     except KeyboardInterrupt:
         logger.info("Server shutdown requested")
@@ -462,7 +496,8 @@ def run_http_app() -> None:
 def run_mcp_stdio() -> None:
     """Run the MCP server in stdio mode for Claude Desktop."""
     try:
-        logger.info("🚀 Starting MCP server with stdio transport...")
+        if not config.server.startup_quiet:
+            logger.info("Starting MCP server...")
         
         # Set up AWS environment and register tools conditionally
         import asyncio
@@ -471,11 +506,19 @@ def run_mcp_stdio() -> None:
             register_tools_conditionally(aws_setup_result)
             
             if not aws_setup_result.get("success"):
-                logger.error("❌ AWS environment setup failed. Server will start with limited functionality.")
+                logger.error("AWS environment setup failed. Server will start with limited functionality.")
+            elif not config.server.startup_quiet:
+                # Show a clean startup summary
+                sessions_count = aws_setup_result.get('sessions_created', 0)
+                if sessions_count > 0:
+                    logger.info(f"AWS Security MCP ready: {sessions_count} accounts accessible")
+                else:
+                    logger.info("AWS Security MCP ready: Single account mode")
             
         except Exception as e:
-            logger.error(f"💥 Could not set up AWS environment: {e}")
-            logger.info("🔧 Starting server without AWS tools...")
+            logger.error(f"Could not set up AWS environment: {e}")
+            if not config.server.startup_quiet:
+                logger.info("Starting server without AWS tools...")
         
         # Run MCP server with stdio transport (required for Claude Desktop)
         mcp.run(transport='stdio')

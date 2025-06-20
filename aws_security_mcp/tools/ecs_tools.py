@@ -209,4 +209,55 @@ async def get_ecs_task(cluster: str, task: str, session_context: Optional[str] =
         # Apply security-focused formatting to reduce response size
         result["task"] = format_ecs_task(result["task"])
     
+    return result
+
+@register_tool()
+async def search_ecs_services_by_ecr_repository(repository_name: str, max_clusters: int = 10, max_services_per_cluster: int = 50, session_context: Optional[str] = None) -> Dict[str, Any]:
+    """Search for ECS services that use a specific ECR repository (optimized version).
+    
+    This tool searches through services and checks their task definitions only when needed.
+    Includes limits to prevent timeouts in large environments. This is essential for security 
+    analysis to understand which services might be affected by vulnerabilities in a specific 
+    container image.
+    
+    Args:
+        repository_name: Name of the ECR repository to search for (e.g., "test-repo")
+        max_clusters: Maximum number of clusters to search (default: 10, helps prevent timeouts)
+        max_services_per_cluster: Maximum services per cluster to check (default: 50, helps prevent timeouts)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        
+    Returns:
+        Dict containing services using the specified ECR repository with security information
+    """
+    logger.info(f"Searching for ECS services using ECR repository: {repository_name} (max_clusters={max_clusters}, max_services_per_cluster={max_services_per_cluster}) (session_context={session_context})")
+    result = await ecs.search_services_by_ecr_repository(repository_name, max_clusters, max_services_per_cluster, session_context=session_context)
+    
+    if result["success"] and result.get("services_using_repository"):
+        # Apply security-focused formatting to reduce response size
+        formatted_services = []
+        for service in result["services_using_repository"]:
+            # Keep all the essential security information but ensure consistent formatting
+            formatted_service = {
+                "service_name": service.get("service_name"),
+                "service_arn": service.get("service_arn"),
+                "cluster_name": service.get("cluster_name"),
+                "cluster_arn": service.get("cluster_arn"),
+                "task_definition": {
+                    "arn": service.get("task_definition_arn"),
+                    "family": service.get("task_definition_family"),
+                    "revision": service.get("task_definition_revision")
+                },
+                "container": {
+                    "name": service.get("container_name"),
+                    "image_uri": service.get("image_uri")
+                },
+                "status": service.get("status"),
+                "running_count": service.get("running_count", 0),
+                "desired_count": service.get("desired_count", 0),
+                "created_at": service.get("created_at")
+            }
+            formatted_services.append(formatted_service)
+        
+        result["services_using_repository"] = formatted_services
+    
     return result 

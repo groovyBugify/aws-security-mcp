@@ -15,13 +15,15 @@ async def get_trusted_advisor_security_checks(session_context: Optional[str] = N
     This tool retrieves all security and fault tolerance checks available in AWS Trusted Advisor.
     Security checks help identify vulnerabilities and security risks in your AWS environment.
     
+    NOTE: Trusted Advisor is a global service operating from us-east-1 region only.
+    
     Args:
         session_context: Optional session key for cross-account access
     
     Returns:
         Dict containing security checks information
     """
-    logger.info("Getting Trusted Advisor security checks")
+    logger.info("Getting Trusted Advisor security checks (global service - us-east-1)")
     result = await trusted_advisor.get_security_checks(session_context=session_context)
     
     # Format the response to focus on security details
@@ -53,13 +55,15 @@ async def list_trusted_advisor_security_recommendations(session_context: Optiona
     best practices for security and compliance. These recommendations identify
     potential vulnerabilities and suggest mitigations.
     
+    NOTE: Trusted Advisor is a global service operating from us-east-1 region only.
+    
     Args:
         session_context: Optional session key for cross-account access
     
     Returns:
         Dict containing security recommendations information
     """
-    logger.info("Listing Trusted Advisor security recommendations")
+    logger.info("Listing Trusted Advisor security recommendations (global service - us-east-1)")
     result = await trusted_advisor.list_security_recommendations(session_context=session_context)
     
     # Format the response to focus on security details
@@ -88,6 +92,8 @@ async def get_trusted_advisor_recommendation_details(recommendation_id: str, ses
     This tool provides comprehensive details about a security recommendation,
     including its description, impact, and remediation suggestions.
     
+    NOTE: Trusted Advisor is a global service operating from us-east-1 region only.
+    
     Args:
         recommendation_id: The ID of the recommendation to retrieve
         session_context: Optional session key for cross-account access
@@ -95,7 +101,7 @@ async def get_trusted_advisor_recommendation_details(recommendation_id: str, ses
     Returns:
         Dict containing recommendation details
     """
-    logger.info(f"Getting details for Trusted Advisor recommendation: {recommendation_id}")
+    logger.info(f"Getting details for Trusted Advisor recommendation: {recommendation_id} (global service - us-east-1)")
     result = await trusted_advisor.get_recommendation_details(recommendation_id, session_context=session_context)
     
     # Format the response to focus on security details
@@ -126,6 +132,8 @@ async def list_trusted_advisor_affected_resources(recommendation_id: str, sessio
     This tool retrieves all AWS resources that are flagged by a particular security
     recommendation, allowing you to identify and remediate specific security issues.
     
+    NOTE: Trusted Advisor is a global service operating from us-east-1 region only.
+    
     Args:
         recommendation_id: The ID of the recommendation
         session_context: Optional session key for cross-account access
@@ -133,7 +141,7 @@ async def list_trusted_advisor_affected_resources(recommendation_id: str, sessio
     Returns:
         Dict containing affected resources information
     """
-    logger.info(f"Listing affected resources for Trusted Advisor recommendation: {recommendation_id}")
+    logger.info(f"Listing affected resources for Trusted Advisor recommendation: {recommendation_id} (global service - us-east-1)")
     result = await trusted_advisor.list_recommendation_resources(recommendation_id, session_context=session_context)
     
     # Format the response to focus on security details

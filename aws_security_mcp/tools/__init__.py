@@ -50,9 +50,11 @@ import aws_security_mcp.tools.trusted_advisor_tools
 import aws_security_mcp.tools.ecr_tools
 import aws_security_mcp.tools.ecs_tools
 import aws_security_mcp.tools.org_tools
+import aws_security_mcp.tools.athena_tools
 
 # Import wrapper modules
 import aws_security_mcp.tools.wrappers.guardduty_wrapper
 import aws_security_mcp.tools.wrappers.ec2_wrapper
 import aws_security_mcp.tools.wrappers.load_balancer_wrapper
-import aws_security_mcp.tools.wrappers.cloudfront_wrapper 
+import aws_security_mcp.tools.wrappers.cloudfront_wrapper
+import aws_security_mcp.tools.wrappers.athena_wrapper 
