@@ -44,6 +44,8 @@ SERVICE_WRAPPER_TOOLS: Set[str] = {
     "discover_waf_operations",
     "trusted_advisor_security_operations",
     "discover_trusted_advisor_operations",
+    "athena_security_operations",
+    "discover_athena_operations",
     "refresh_aws_session",
     "connected_aws_accounts",
     "aws_session_operations",

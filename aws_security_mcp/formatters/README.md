@@ -1,6 +1,83 @@
-# AWS Security MCP - Formatter Modules
+# AWS Security MCP Formatters
 
-This directory contains formatter modules that transform the responses from AWS service APIs into standardized, user-friendly formats. These formatters ensure consistent response structures across all MCP tools.
+This directory contains formatter modules that transform raw AWS API responses into structured, readable formats optimized for Claude's consumption.
+
+## Purpose
+
+Formatters standardize AWS responses, which can be complex and verbose, into consistent structures with:
+- Relevant security information prioritized
+- Unnecessary fields removed
+- Nested structures flattened where appropriate
+- Standardized field naming
+
+## Available Formatters
+
+### Security Analysis
+- **[iam_formatter.py](iam_formatter.py)** - Formats IAM resources like users, roles, and policies
+- **[securityhub.py](securityhub.py)** - Formats SecurityHub findings and compliance data
+- **[guardduty.py](guardduty.py)** - Formats GuardDuty threat detection findings
+- **[shield.py](shield.py)** - Formats Shield DDoS protection data
+- **[waf.py](waf.py)** - Formats WAF rules and web ACLs
+
+### Infrastructure & Networking
+- **[ec2.py](ec2.py)** - Formats EC2 instances, security groups, and VPC resources
+- **[load_balancer.py](load_balancer.py)** - Formats load balancer configurations (ELB/ALB/NLB)
+- **[route53.py](route53.py)** - Formats Route53 DNS records and hosted zones
+- **[cloudfront.py](cloudfront.py)** - Formats CloudFront distribution data
+
+### Storage & Data
+- **[s3_formatter.py](s3_formatter.py)** - Formats S3 bucket configurations and policies
+- **[ecr.py](ecr.py)** - Formats ECR repository data and image scan results
+
+### Compute & Applications
+- **[lambda_formatter.py](lambda_formatter.py)** - Formats Lambda function information
+- **[ecs_formatter.py](ecs_formatter.py)** - Formats ECS cluster, service, and task data
+
+### Analytics & Monitoring
+- **[athena.py](athena.py)** - Formats Athena query results, database schemas, and execution metadata
+
+### Organization & Resource Management
+- **[org_formatter.py](org_formatter.py)** - Formats AWS Organizations structure and accounts
+- **[resource_tagging.py](resource_tagging.py)** - Formats resource tag information
+
+## Common Formatting Patterns
+
+The formatter modules follow consistent design patterns:
+- Security-relevant information is prioritized
+- Large responses are summarized appropriately
+- Timestamps are converted to human-readable format
+- ARNs are parsed into component parts when useful
+- Pagination information is properly structured
+- Error conditions are gracefully handled
+
+## Athena Formatter Features
+
+The **[athena.py](athena.py)** formatter provides specialized formatting for:
+
+### Database & Schema Information
+- Database summaries with metadata
+- Table schema details including columns, partitions, and storage information
+- Table metadata formatting with security-relevant details
+
+### Query Execution & Results
+- Query execution status and performance metrics
+- Formatted query results with proper column mapping
+- Execution statistics (execution time, data scanned, costs)
+- Query validation and security recommendations
+
+### Performance & Security Recommendations
+- Built-in query optimization suggestions
+- Security best practices for CloudTrail/VPC Flow Logs queries
+- Performance recommendations for large datasets
+- Partition pruning and date filtering advice
+
+### Specialized Formatters
+- `format_query_results()` - Converts raw Athena results to structured data with column headers
+- `format_query_execution()` - Provides comprehensive execution status and statistics
+- `format_table_metadata()` - Formats table schemas for easy consumption
+- `generate_query_recommendations()` - Provides security and performance recommendations
+
+The Athena formatter is particularly optimized for security analysis use cases, providing intelligent recommendations for querying CloudTrail logs and VPC Flow Logs with proper date/time filtering to control costs and performance.
 
 ## Formatter Structure
 

@@ -19,7 +19,8 @@ from aws_security_mcp.tools.ecs_tools import (
     list_ecs_tasks as _list_ecs_tasks,
     list_ecs_container_instances as _list_ecs_container_instances,
     get_ecs_service as _get_ecs_service,
-    get_ecs_task as _get_ecs_task
+    get_ecs_task as _get_ecs_task,
+    search_ecs_services_by_ecr_repository as _search_ecs_services_by_ecr_repository
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,9 @@ async def ecs_security_operations(operation: str, session_context: Optional[str]
     
     🖥️ INFRASTRUCTURE MONITORING:
     - list_container_instances: List container instances with security details
+    
+    🔍 ECR INTEGRATION:
+    - search_services_by_ecr_repository: Find ECS services using a specific ECR repository
     
     💡 INTELLIGENT USAGE EXAMPLES:
     
@@ -78,6 +82,12 @@ async def ecs_security_operations(operation: str, session_context: Optional[str]
     📋 Search task definitions by family:
     operation="list_task_definitions", family_prefix="web-app"
     
+    🔍 Find services using ECR repository:
+    operation="search_services_by_ecr_repository", repository_name="test-repo"
+    
+    🔍 Find services with limits (for large environments):
+    operation="search_services_by_ecr_repository", repository_name="test-repo", max_clusters=5, max_services_per_cluster=20
+    
     Args:
         operation: The ECS operation to perform (see descriptions above)
         session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
@@ -95,6 +105,11 @@ async def ecs_security_operations(operation: str, session_context: Optional[str]
         
         # Task parameters:
         task: ECS task ARN or ID
+        
+        # ECR integration parameters:
+        repository_name: ECR repository name to search for in services
+        max_clusters: Maximum clusters to search (default: 10, prevents timeouts)
+        max_services_per_cluster: Maximum services per cluster (default: 50, prevents timeouts)
         
     Returns:
         JSON formatted response with operation results and ECS security insights
@@ -200,12 +215,31 @@ async def ecs_security_operations(operation: str, session_context: Optional[str]
             
             return json.dumps(await _list_ecs_container_instances(cluster=cluster, session_context=session_context))
             
+        elif operation == "search_services_by_ecr_repository":
+            repository_name = params.get("repository_name")
+            if not repository_name:
+                return json.dumps({
+                    "error": "repository_name parameter is required for search_services_by_ecr_repository",
+                    "usage": "operation='search_services_by_ecr_repository', repository_name='test-repo'"
+                })
+            
+            # Performance optimization parameters
+            max_clusters = params.get("max_clusters", 10)
+            max_services_per_cluster = params.get("max_services_per_cluster", 50)
+            
+            return json.dumps(await _search_ecs_services_by_ecr_repository(
+                repository_name=repository_name,
+                max_clusters=max_clusters,
+                max_services_per_cluster=max_services_per_cluster,
+                session_context=session_context
+            ))
+            
         else:
             # Provide helpful error with available operations
             available_operations = [
                 "list_clusters", "list_task_definitions", "get_task_definition",
                 "list_services", "get_service", "list_tasks", "get_task",
-                "list_container_instances"
+                "list_container_instances", "search_services_by_ecr_repository"
             ]
             
             return json.dumps({
@@ -214,7 +248,8 @@ async def ecs_security_operations(operation: str, session_context: Optional[str]
                 "usage_examples": {
                     "list_clusters": "operation='list_clusters'",
                     "list_services": "operation='list_services', cluster='my-cluster'",
-                    "get_task_definition": "operation='get_task_definition', task_definition='my-app'"
+                    "get_task_definition": "operation='get_task_definition', task_definition='my-app'",
+                    "search_services_by_ecr_repository": "operation='search_services_by_ecr_repository', repository_name='test-repo', max_clusters=5"
                 }
             })
             
@@ -363,6 +398,30 @@ async def discover_ecs_operations() -> str:
                         "ecs_security_operations(operation='list_container_instances', cluster='my-cluster', session_context='123456789012_aws_dev')"
                     ]
                 }
+            },
+            "ecr_integration": {
+                "search_services_by_ecr_repository": {
+                    "description": "Find ECS services that use a specific ECR repository (optimized for large environments)",
+                    "parameters": {
+                        "repository_name": {"type": "str", "required": True, "description": "Name of the ECR repository to search for"},
+                        "max_clusters": {"type": "int", "default": 10, "description": "Maximum clusters to search (prevents timeouts)"},
+                        "max_services_per_cluster": {"type": "int", "default": 50, "description": "Maximum services per cluster (prevents timeouts)"},
+                        "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
+                    },
+                    "examples": [
+                        "ecs_security_operations(operation='search_services_by_ecr_repository', repository_name='test-repo')",
+                        "ecs_security_operations(operation='search_services_by_ecr_repository', repository_name='my-app-backend', max_clusters=5)",
+                        "ecs_security_operations(operation='search_services_by_ecr_repository', repository_name='api-server', max_clusters=3, max_services_per_cluster=20)",
+                        "ecs_security_operations(operation='search_services_by_ecr_repository', repository_name='api-server', session_context='123456789012_aws_dev')"
+                    ],
+                    "use_cases": [
+                        "Find which services might be affected by ECR repository vulnerabilities",
+                        "Audit container image usage across your ECS infrastructure",
+                        "Track deployment of specific container images",
+                        "Security impact analysis for container updates",
+                        "Optimized search for large environments with many clusters/services"
+                    ]
+                }
             }
         },
         "ecs_security_insights": {
@@ -370,7 +429,8 @@ async def discover_ecs_operations() -> str:
                 "List all clusters: operation='list_clusters'",
                 "List services in cluster: operation='list_services', cluster='my-cluster'",
                 "Get task definition details: operation='get_task_definition', task_definition='my-app'",
-                "Monitor running tasks: operation='list_tasks', cluster='my-cluster'"
+                "Monitor running tasks: operation='list_tasks', cluster='my-cluster'",
+                "Find services using ECR repo: operation='search_services_by_ecr_repository', repository_name='test-repo'"
             ],
             "security_monitoring_patterns": [
                 "Audit task definition IAM roles and execution roles",
@@ -378,7 +438,8 @@ async def discover_ecs_operations() -> str:
                 "Monitor network modes and security group configurations",
                 "Check secrets and environment variable handling",
                 "Validate logging configurations for audit trails",
-                "Monitor resource limits and container isolation"
+                "Monitor resource limits and container isolation",
+                "Track ECR repository usage across services for vulnerability impact analysis"
             ],
             "security_best_practices": [
                 "Use task IAM roles instead of container-level AWS credentials",
@@ -388,7 +449,8 @@ async def discover_ecs_operations() -> str:
                 "Configure appropriate security groups for tasks",
                 "Enable CloudTrail for ECS API call monitoring",
                 "Use Fargate for improved container isolation",
-                "Implement network segmentation with VPC and subnets"
+                "Implement network segmentation with VPC and subnets",
+                "Regularly scan ECR repositories and update affected services"
             ],
             "compliance_considerations": [
                 "Ensure containers don't run as root user when possible",
@@ -396,13 +458,21 @@ async def discover_ecs_operations() -> str:
                 "Check that containers use read-only file systems where appropriate",
                 "Audit network configurations for proper isolation",
                 "Monitor container image sources and vulnerability scanning",
-                "Ensure proper logging and monitoring for compliance requirements"
+                "Ensure proper logging and monitoring for compliance requirements",
+                "Track container image lineage and deployment patterns"
             ],
             "cost_and_performance": [
                 "Monitor CPU and memory utilization for right-sizing",
                 "Review task placement strategies for optimal resource usage",
                 "Analyze service scaling patterns and auto-scaling configurations",
                 "Check for unused or idle services and task definitions"
+            ],
+            "ecr_integration_benefits": [
+                "Quickly identify services affected by ECR repository vulnerabilities",
+                "Audit container image usage across your ECS infrastructure",
+                "Track deployment patterns and container image lineage",
+                "Enable rapid response to security incidents in container images",
+                "Simplify container image lifecycle management"
             ]
         }
     }

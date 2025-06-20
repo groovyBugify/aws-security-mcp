@@ -10,6 +10,7 @@ from aws_security_mcp.tools import register_tool
 from aws_security_mcp.formatters.guardduty import (
     format_guardduty_detector_json,
     format_guardduty_finding_json,
+    format_guardduty_findings_list_statistics_json,
     format_guardduty_findings_statistics_json,
     format_guardduty_detectors_summary_json,
     format_guardduty_ip_set_json,
@@ -182,7 +183,7 @@ async def list_findings(
             findings = guardduty.filter_findings_by_text(findings, search_term)
         
         # Get a summary of findings
-        findings_summary = format_guardduty_findings_statistics_json(findings)
+        findings_summary = format_guardduty_findings_list_statistics_json(findings)
         
         # Format each finding
         formatted_findings = []
@@ -205,6 +206,89 @@ async def list_findings(
         return json.dumps({
             "error": {
                 "message": f"Error listing GuardDuty findings for detector '{detector_id}': {str(e)}",
+                "type": type(e).__name__
+            }
+        })
+
+
+@register_tool()
+async def get_findings_statistics(
+    detector_id: str,
+    finding_statistic_types: Optional[List[str]] = None,
+    group_by: Optional[str] = None,
+    finding_criteria: Optional[Dict[str, Any]] = None,
+    order_by: Optional[str] = None,
+    max_results: Optional[int] = None,
+    session_context: Optional[str] = None
+) -> str:
+    """Get official AWS-calculated statistics for GuardDuty findings.
+    
+    Args:
+        detector_id: GuardDuty detector ID
+        finding_statistic_types: Types of statistics to retrieve (e.g., ['COUNT_BY_SEVERITY'])
+        group_by: Group statistics by one of: ACCOUNT, DATE, FINDING_TYPE, RESOURCE, SEVERITY
+        finding_criteria: Criteria to filter findings for statistics
+        order_by: Sort order: ASC or DESC (only with group_by)
+        max_results: Maximum results to return (only with group_by, default 25, max 100)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        
+    Returns:
+        JSON formatted string with official AWS GuardDuty findings statistics
+        
+    Examples:
+        # Get severity count statistics
+        finding_statistic_types=['COUNT_BY_SEVERITY']
+        
+        # Get statistics grouped by finding type
+        group_by='FINDING_TYPE', order_by='DESC', max_results=10
+        
+        # Get statistics with filtering
+        finding_criteria={'Criterion': {'severity': {'Gte': 4.0}}}
+    """
+    logger.info(f"Getting GuardDuty findings statistics for detector {detector_id} (session_context={session_context})")
+    
+    try:
+        # Call the service function
+        statistics = guardduty.get_findings_statistics(
+            detector_id=detector_id,
+            finding_statistic_types=finding_statistic_types,
+            group_by=group_by,
+            finding_criteria=finding_criteria,
+            order_by=order_by,
+            max_results=max_results,
+            session_context=session_context
+        )
+        
+        if not statistics:
+            return json.dumps({
+                "detector_id": detector_id,
+                "error": "Unable to retrieve findings statistics",
+                "statistics": None
+            })
+        
+        # Extract the findings statistics from the response
+        finding_statistics = statistics.get('FindingStatistics', {})
+        
+        # Format the statistics using the existing formatter
+        formatted_statistics = format_guardduty_findings_statistics_json(finding_statistics)
+        
+        result = {
+            "detector_id": detector_id,
+            "summary": "Official AWS GuardDuty findings statistics",
+            "statistics_type": "severity_count" if finding_statistic_types else f"grouped_by_{group_by.lower()}" if group_by else "unknown",
+            "official_statistics": formatted_statistics,
+            "raw_response": {
+                "finding_statistics": finding_statistics,
+                "next_token": statistics.get('NextToken')
+            }
+        }
+        
+        return json.dumps(result, default=lambda obj: obj.isoformat() if hasattr(obj, 'isoformat') else str(obj))
+    except Exception as e:
+        logger.error(f"Error getting GuardDuty findings statistics: {e}")
+        return json.dumps({
+            "error": {
+                "message": f"Error getting GuardDuty findings statistics for detector '{detector_id}': {str(e)}",
                 "type": type(e).__name__
             }
         })

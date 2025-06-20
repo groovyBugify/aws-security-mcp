@@ -51,7 +51,81 @@ AWS Security MCP is a Model Context Protocol (MCP) server that enables AI assist
 * **AWS Account** with proper credentials
 * **MCP Client** (Claude Desktop, Cline, 5ire, etc.)
 
-## Cross-Account Access Setup
+## Configuration
+
+### YAML Configuration (Recommended)
+
+AWS Security MCP uses a `config.yaml` file for easy configuration management. The file is automatically created with sensible defaults. You can customize it for your environment:
+
+```yaml
+# AWS Security MCP Configuration
+aws:
+  region: "us-east-1"              # Your primary AWS region
+  profile: null                    # AWS profile (null = auto-detect)
+
+server:
+  host: "127.0.0.1"                # Server bind address
+  port: 8000                       # Server port
+  log_level: "warning"             # debug, info, warning, error, critical
+  startup_quiet: true              # Reduce startup noise
+  tool_quiet: true                 # Reduce tool execution logs
+  minimal_logging: false           # Ultra-minimal mode for production
+
+cross_account:
+  role_name: "aws-security-mcp-cross-account-access"
+  auto_setup_on_startup: true      # Auto-discover organization accounts
+  max_concurrent_assumptions: 5    # Parallel role assumptions
+  session_duration_seconds: 3600   # 1 hour session duration
+```
+
+### Configuration Priority
+
+The configuration system follows this priority order (highest to lowest):
+1. **Environment Variables** (highest priority - always override everything)
+2. **config.yaml file** (single source of truth for all defaults)
+3. **Emergency fallbacks** (minimal built-in defaults only if config.yaml is missing)
+
+**`config.yaml` is the single source of truth for all default values.** The Python code contains no hardcoded defaults - everything comes from your YAML configuration file.
+
+### Security Note
+
+**AWS credentials are never stored in YAML files.** Always use environment variables:
+```bash
+export AWS_ACCESS_KEY_ID=your_access_key
+export AWS_SECRET_ACCESS_KEY=your_secret_key
+# export AWS_SESSION_TOKEN=token    # If using temporary credentials
+# export AWS_PROFILE=profile_name   # If using AWS profiles
+```
+
+### Quick Configuration Examples
+
+**For Development (Verbose Logging):**
+```yaml
+server:
+  log_level: "debug"
+  startup_quiet: false
+  tool_quiet: false
+```
+
+**For Production (Minimal Logging):**
+```yaml
+server:
+  log_level: "error" 
+  startup_quiet: true
+  tool_quiet: true
+  minimal_logging: true
+```
+
+**For Large Organizations (Performance Optimized):**
+```yaml
+cross_account:
+  max_concurrent_assumptions: 10
+  session_duration_seconds: 7200  # 2 hours
+server:
+  max_concurrent_requests: 20
+```
+
+## Cross-Account Access Setup 
 
 ### How Cross-Account Access Works
 
@@ -249,14 +323,44 @@ This setup allows the MCP server to securely access resources across all your AW
      aws-security-mcp
    ```
 
-2. **Environment Variables for SSE:**
+2. **Configuration Methods:**
+
+   **Option A: YAML Configuration (Recommended)**
+   
+   Edit the `config.yaml` file in the project root:
+   ```yaml
+   server:
+     host: "0.0.0.0"          # Bind to all interfaces
+     port: 8000               # Server port
+     log_level: "warning"     # Logging level
+     startup_quiet: true      # Suppress startup details
+     tool_quiet: true         # Suppress tool execution logs
+     minimal_logging: true    # Ultra-minimal output mode
+   
+   aws:
+     region: "us-east-1"      # Your preferred AWS region
+     profile: null            # AWS profile (leave null for auto-detection)
+   
+   cross_account:
+     auto_setup_on_startup: true    # Auto-discover accounts
+     max_concurrent_assumptions: 5  # Parallel role assumptions
+   ```
+   
+   **Option B: Environment Variables (Legacy)**
    ```bash
    # Optional SSE configuration
    export MCP_HOST=0.0.0.0          # Bind to all interfaces
    export MCP_PORT=8000             # Server port
-   export MCP_LOG_LEVEL=info        # Logging level
+   export MCP_LOG_LEVEL=warning     # Logging level (debug, info, warning, error, critical)
    export MCP_DEBUG=false           # Debug mode
+   
+   # Minimal logging options
+   export MCP_MINIMAL_LOGGING=true  # Ultra-minimal output mode
+   export MCP_STARTUP_QUIET=true    # Suppress startup details
+   export MCP_TOOL_QUIET=true       # Suppress tool execution logs
    ```
+   
+   **Note:** AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN) must always be set as environment variables for security. Environment variables always override YAML settings.
 
 ### Load Balancer Configuration
 
@@ -290,13 +394,13 @@ When deploying behind a load balancer:
 
 ### Infrastructure Queries
 
-**Query:** "Show me all EC2 instances across all accounts"
+**Query:** "As an experienced Senior Security Engineer, find the following \"172.24.12.44\" IP in all my connected aws accounts, and post that do a blast radius analysis of the associated AWS Resources with the IP address."
 
-**Query:** "Find security groups with port 22 open to the internet"
+**Query:** "using \"sequentialThinking\" tool, find the subdomain *subdomain.example.com* in my route53 account, post that share a network visualisation graph"
 
-**Query:** "List S3 buckets with public read access"
+**Query:** "list all resources tagged under Team: Security"
 
-**Query:** "Show me GuardDuty findings from the last 7 days"
+**Query:** "find all domains under my route53 that have "/login" added under the behaiour of the associated cloudfront distributions."
 
 **Query:** "Generate a network map for my production environment"
 
@@ -312,19 +416,6 @@ AWS Security MCP has been optimized from **110+ individual tools** to **38 core 
 - **Faster Loading**: Quicker startup and tool discovery
 - **Better Organization**: Related functions are grouped logically
 - **Improved Reliability**: Fewer tools mean less complexity and fewer failure points
-
-### Tool Categories
-
-The 38 tools are organized into these categories:
-- **Account Management** (3 tools): Cross-account access, session management
-- **IAM Security** (5 tools): Roles, policies, users, access analysis
-- **Compute Security** (8 tools): EC2, Lambda, containers
-- **Network Security** (6 tools): VPCs, security groups, load balancers
-- **Storage Security** (4 tools): S3, EBS, file systems
-- **Security Services** (8 tools): GuardDuty, SecurityHub, WAF, Shield
-- **Compliance & Audit** (4 tools): Config, CloudTrail, Access Analyzer
-
-Each tool can handle multiple related operations, providing the same functionality as the original 110+ tools but with better performance.
 
 ## Running AWS Security MCP on Steroids
 
@@ -401,6 +492,48 @@ You can combine AWS Security MCP with other MCP servers for enhanced capabilitie
 # Add to run_aws_security.sh
 export MCP_DEBUG=true
 export AWS_SDK_DEBUG=true
+```
+
+**Reduce Logging Verbosity:**
+```bash
+# For minimal output (only errors and critical messages)
+export MCP_LOG_LEVEL=error
+export MCP_MINIMAL_LOGGING=true
+export MCP_STARTUP_QUIET=true
+export MCP_TOOL_QUIET=true
+
+# For moderate output (warnings and above)
+export MCP_LOG_LEVEL=warning
+export MCP_STARTUP_QUIET=true
+
+# For default output but without startup noise
+export MCP_STARTUP_QUIET=true
+```
+
+**Example Output with Progress Bars:**
+```bash
+# With startup_quiet=false (default)
+Starting MCP server...
+Setting up AWS environment...
+Validating AWS credentials...
+AWS credentials validated successfully
+Initializing cross-account credential sessions...
+Assuming roles: [████████░░] 8/10 accounts (8 successful, 2 failed)
+Cross-account setup complete: 8 successful, 2 failed (10 total)
+Registering MCP tools...
+Tool registration complete: 45 tools registered
+Multi-account tools available (sessions: 8)
+AWS Security MCP ready: 8 accounts accessible
+
+# With startup_quiet=true
+Assuming roles: [████████░░] 8/10 accounts (8 successful, 2 failed)
+AWS Security MCP ready: 8 accounts accessible
+
+# Examples with different account counts:
+# 3 accounts: Assuming roles: [██░] 2/3 accounts (2 successful, 1 failed)
+# 5 accounts: Assuming roles: [████░] 4/5 accounts (4 successful, 1 failed) 
+# 15 accounts: Assuming roles: [████████████░░░] 12/15 accounts (11 successful, 1 failed)
+# 50+ accounts: Assuming roles: [████████████████████████████████████████████████░░] 48/52 accounts (capped at 50 chars)
 ```
 
 **Test MCP Server Directly:**

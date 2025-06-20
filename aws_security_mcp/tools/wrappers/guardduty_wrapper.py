@@ -15,6 +15,7 @@ from aws_security_mcp.tools.guardduty_tools import (
     list_detectors as _list_detectors,
     list_findings as _list_findings,
     get_finding_details as _get_finding_details,
+    get_findings_statistics as _get_findings_statistics,
     list_ip_sets as _list_ip_sets,
     list_threat_intel_sets as _list_threat_intel_sets
 )
@@ -31,6 +32,7 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
     🚨 FINDINGS & THREATS:
     - list_findings: Get security findings with advanced filtering (severity, search terms)
     - get_finding_details: Deep analysis of specific findings with remediation guidance
+    - get_findings_statistics: Get official AWS-calculated statistics (severity counts, grouping)
     
     🛡️ THREAT INTELLIGENCE:
     - list_ip_sets: View trusted/threat IP sets for custom threat detection
@@ -50,6 +52,12 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
     🔎 Search for specific threats:
     operation="list_findings", detector_id="abc123", search_term="cryptocurrency"
     
+    📊 Get official AWS statistics by severity:
+    operation="get_findings_statistics", detector_id="abc123", finding_statistic_types=["COUNT_BY_SEVERITY"]
+    
+    📊 Get statistics grouped by finding type:
+    operation="get_findings_statistics", detector_id="abc123", group_by="FINDING_TYPE", order_by="DESC"
+    
     📊 Analyze specific finding:
     operation="get_finding_details", detector_id="abc123", finding_id="def456"
     
@@ -68,6 +76,10 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
         search_term: Text search across finding details
         finding_id: Specific finding ID for detailed analysis
         finding_ids: List of specific finding IDs to retrieve
+        finding_statistic_types: Types of statistics to get (e.g., ["COUNT_BY_SEVERITY"])
+        group_by: Group statistics by: ACCOUNT, DATE, FINDING_TYPE, RESOURCE, SEVERITY
+        finding_criteria: Criteria to filter findings for statistics
+        order_by: Sort order for grouped statistics (ASC, DESC)
         
     Returns:
         JSON formatted response with operation results and security insights
@@ -78,6 +90,21 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
         params = params["params"]
+    elif "params" in params and isinstance(params["params"], str):
+        try:
+            # Parse JSON string params
+            import json
+            parsed_params = json.loads(params["params"])
+            params.update(parsed_params)
+            del params["params"]
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing JSON params: {e}")
+            return json.dumps({
+                "error": {
+                    "message": f"Invalid JSON in params: {str(e)}",
+                    "type": "JSONDecodeError"
+                }
+            })
     
     try:
         if operation == "list_detectors":
@@ -160,6 +187,45 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
                 session_context=session_context
             )
             
+        elif operation == "get_findings_statistics":
+            # Ensure detector_id is provided
+            if "detector_id" not in params:
+                return json.dumps({
+                    "error": "detector_id is required for get_findings_statistics operation",
+                    "usage": "operation='get_findings_statistics', detector_id='detector-id', finding_statistic_types=['COUNT_BY_SEVERITY'] OR group_by='FINDING_TYPE'"
+                })
+            
+            # Ensure either finding_statistic_types OR group_by is provided
+            finding_statistic_types = params.get("finding_statistic_types")
+            group_by = params.get("group_by")
+            
+            if not finding_statistic_types and not group_by:
+                return json.dumps({
+                    "error": "Either finding_statistic_types or group_by parameter is required",
+                    "usage": "operation='get_findings_statistics', detector_id='detector-id', finding_statistic_types=['COUNT_BY_SEVERITY'] OR group_by='FINDING_TYPE'"
+                })
+            
+            if finding_statistic_types and group_by:
+                return json.dumps({
+                    "error": "Cannot provide both finding_statistic_types and group_by parameters",
+                    "usage": "operation='get_findings_statistics', detector_id='detector-id', finding_statistic_types=['COUNT_BY_SEVERITY'] OR group_by='FINDING_TYPE'"
+                })
+            
+            detector_id = params["detector_id"]
+            finding_criteria = params.get("finding_criteria")
+            order_by = params.get("order_by")
+            max_results = params.get("max_results")
+            
+            return await _get_findings_statistics(
+                detector_id=detector_id,
+                finding_statistic_types=finding_statistic_types,
+                group_by=group_by,
+                finding_criteria=finding_criteria,
+                order_by=order_by,
+                max_results=max_results,
+                session_context=session_context
+            )
+            
         else:
             # Provide helpful error with available operations
             available_operations = [
@@ -167,7 +233,8 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
                 "list_findings", 
                 "get_finding_details",
                 "list_ip_sets",
-                "list_threat_intel_sets"
+                "list_threat_intel_sets",
+                "get_findings_statistics"
             ]
             
             return json.dumps({
@@ -176,12 +243,15 @@ async def guardduty_security_operations(operation: str, session_context: Optiona
                 "usage_examples": {
                     "list_detectors": "operation='list_detectors'",
                     "list_findings": "operation='list_findings', detector_id='detector-id', severity='HIGH'",
-                    "get_finding_details": "operation='get_finding_details', detector_id='detector-id', finding_id='finding-id'"
+                    "get_finding_details": "operation='get_finding_details', detector_id='detector-id', finding_id='finding-id'",
+                    "get_findings_statistics": "operation='get_findings_statistics', detector_id='detector-id', finding_statistic_types=['COUNT_BY_SEVERITY']"
                 }
             })
             
     except Exception as e:
         logger.error(f"Error in GuardDuty operation '{operation}': {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return json.dumps({
             "error": {
                 "message": f"Error executing GuardDuty operation '{operation}': {str(e)}",
@@ -307,6 +377,35 @@ async def discover_guardduty_operations() -> str:
                     "Validate threat feed configurations",
                     "Audit custom threat indicators",
                     "Cross-account threat intelligence management"
+                ]
+            },
+            "get_findings_statistics": {
+                "description": "Get official AWS-calculated statistics (severity counts, grouping)",
+                "parameters": {
+                    "detector_id": {"type": "str", "required": True, "description": "GuardDuty detector ID"},
+                    "finding_statistic_types": {"type": "list", "description": "Types of statistics to get (e.g., ['COUNT_BY_SEVERITY'])"},
+                    "group_by": {"type": "str", "options": ["ACCOUNT", "DATE", "FINDING_TYPE", "RESOURCE", "SEVERITY"], "description": "Group statistics by category"},
+                    "finding_criteria": {"type": "dict", "description": "Criteria to filter findings for statistics"},
+                    "order_by": {"type": "str", "options": ["ASC", "DESC"], "description": "Sort order (only with group_by)"},
+                    "max_results": {"type": "int", "description": "Maximum results (only with group_by, max 100)"},
+                    "session_context": {"type": "str", "description": "Optional session key for cross-account access"}
+                },
+                "examples": [
+                    "guardduty_security_operations(operation='get_findings_statistics', detector_id='abc123', finding_statistic_types=['COUNT_BY_SEVERITY'])",
+                    "guardduty_security_operations(operation='get_findings_statistics', detector_id='abc123', group_by='FINDING_TYPE', order_by='DESC', max_results=10)",
+                    "guardduty_security_operations(operation='get_findings_statistics', detector_id='abc123', finding_statistic_types=['COUNT_BY_SEVERITY'], session_context='123456789012_aws_dev')"
+                ],
+                "usage_notes": [
+                    "Must provide either finding_statistic_types OR group_by, but not both",
+                    "order_by and max_results can only be used with group_by",
+                    "Use finding_statistic_types=['COUNT_BY_SEVERITY'] for basic severity counts",
+                    "Use group_by for advanced grouping and sorting capabilities"
+                ],
+                "use_cases": [
+                    "Get official AWS-calculated severity statistics",
+                    "Analyze findings grouped by type, account, or resource",
+                    "Generate statistics reports with filtering",
+                    "Cross-account statistics monitoring"
                 ]
             }
         },

@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 async def trusted_advisor_security_operations(operation: str, session_context: Optional[str] = None, **params) -> str:
     """Trusted Advisor Security Operations Hub - Comprehensive security recommendations and compliance monitoring.
     
+    ⚠️  IMPORTANT: Trusted Advisor is a GLOBAL AWS service that operates only in us-east-1 region.
+    All operations are automatically routed to us-east-1 regardless of your account's default region.
+    
     🔍 SECURITY CHECKS ANALYSIS:
     - get_security_checks: Get all security-related checks and their status
     
@@ -50,7 +53,7 @@ async def trusted_advisor_security_operations(operation: str, session_context: O
     
     Args:
         operation: The Trusted Advisor operation to perform (see descriptions above)
-        session_context: Optional session key for cross-account access
+        session_context: Optional session key for cross-account access (operates in us-east-1 only)
         
         # Recommendation parameters:
         recommendation_id: ID of the specific recommendation to retrieve details or affected resources
@@ -59,7 +62,7 @@ async def trusted_advisor_security_operations(operation: str, session_context: O
         JSON formatted response with operation results and security insights
     """
     
-    logger.info(f"Trusted Advisor operation requested: {operation}")
+    logger.info(f"Trusted Advisor operation requested: {operation} (global service - us-east-1 only)")
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -146,11 +149,13 @@ async def discover_trusted_advisor_operations(session_context: Optional[str] = N
         "service": "AWS Trusted Advisor",
         "description": "Service providing real-time guidance to help optimize AWS infrastructure, improve security, and reduce costs",
         "wrapper_tool": "trusted_advisor_security_operations",
+        "global_service_notice": "⚠️ IMPORTANT: Trusted Advisor is a GLOBAL service that operates only in us-east-1 region. All API calls are automatically routed to us-east-1.",
         "supported_features": {
             "security_checks": "Security and compliance checks based on AWS best practices",
             "recommendations": "Actionable recommendations for improving security posture",
             "resource_analysis": "Detailed analysis of specific resources flagged by recommendations",
-            "risk_assessment": "Risk level categorization for prioritizing remediation efforts"
+            "risk_assessment": "Risk level categorization for prioritizing remediation efforts",
+            "global_coverage": "Provides recommendations for resources across all AWS regions from us-east-1 endpoint"
         },
         "operation_categories": {
             "security_checks_analysis": {
@@ -235,6 +240,13 @@ async def discover_trusted_advisor_operations(session_context: Optional[str] = N
                 "developer": "Core security checks available",
                 "business": "Full security check suite available",
                 "enterprise": "All checks plus API access for automation"
+            },
+            "regional_considerations": {
+                "global_service": "Trusted Advisor operates globally from us-east-1 region only",
+                "endpoint_location": "All API calls route to https://trustedadvisor.us-east-1.amazonaws.com",
+                "resource_coverage": "Analyzes resources across ALL AWS regions from single endpoint",
+                "cross_account_access": "Session context works normally but always connects via us-east-1",
+                "latency_impact": "Minimal - service is optimized for global access from us-east-1"
             },
             "integration_capabilities": [
                 "AWS Config integration for compliance tracking",

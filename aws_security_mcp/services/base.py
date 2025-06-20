@@ -60,12 +60,15 @@ def get_aws_session(
             from aws_security_mcp.services.credentials import get_session_for_account
             cross_account_session = get_session_for_account(session_context)
             if cross_account_session and not cross_account_session.is_expired():
-                logger.info(f"Using cross-account session: {session_context} ({cross_account_session.account_name})")
+                if not config.server.tool_quiet:
+                    logger.debug(f"Using cross-account session: {session_context} ({cross_account_session.account_name})")
                 return cross_account_session.session
             else:
-                logger.warning(f"Cross-account session '{session_context}' not found or expired, falling back to default")
+                if not config.server.tool_quiet:
+                    logger.debug(f"Cross-account session '{session_context}' not found or expired, falling back to default")
         except Exception as e:
-            logger.warning(f"Error accessing cross-account session '{session_context}': {e}, falling back to default")
+            if not config.server.tool_quiet:
+                logger.debug(f"Error accessing cross-account session '{session_context}': {e}, falling back to default")
     
     # Use provided or default values
     region = region or config.aws.aws_region
@@ -74,51 +77,49 @@ def get_aws_session(
     # Build session arguments
     session_kwargs = {"region_name": region}
     
-    # Add credentials if available
-    if config.aws.has_profile and profile:
+    # Add profile if specified
+    if profile:
         session_kwargs["profile_name"] = profile
-        logger.info(f"Using AWS profile: {profile}")
-    elif config.aws.has_sts_credentials:
-        session_kwargs.update({
-            "aws_access_key_id": config.aws.aws_access_key_id,
-            "aws_secret_access_key": config.aws.aws_secret_access_key,
-            "aws_session_token": config.aws.aws_session_token
-        })
-        logger.info("Using temporary STS credentials")
-    elif config.aws.has_iam_credentials:
-        session_kwargs.update({
-            "aws_access_key_id": config.aws.aws_access_key_id,
-            "aws_secret_access_key": config.aws.aws_secret_access_key
-        })
-        logger.info("Using IAM access key credentials")
-    else:
-        # Provide more specific logging for automatic credential resolution
-        if config.aws.is_ecs_environment:
-            logger.info("Using automatic credential resolution (ECS Task Role detected)")
-        elif config.aws.is_ec2_environment:
-            logger.info("Using automatic credential resolution (EC2 Instance Profile detected)")
-        else:
-            logger.info("Using automatic credential resolution (environment variables, AWS config files, or instance profile)")
+        if not config.server.startup_quiet:
+            logger.debug(f"Using AWS profile: {profile}")
     
-    # Create and return the session
+    # Create session
+    session = boto3.Session(**session_kwargs)
+    
+    # Test credentials and log source information (only during startup)
     try:
-        session = boto3.Session(**session_kwargs)
+        sts_client = session.client('sts')
+        identity = sts_client.get_caller_identity()
         
-        # Validate that credentials are available
-        if session.get_credentials() is None:
-            logger.warning("No AWS credentials found. Functionality may be limited.")
+        # Determine credential source for logging
+        if config.aws.has_sts_credentials:
+            if not config.server.startup_quiet:
+                logger.debug("Using temporary STS credentials")
+        elif config.aws.has_iam_credentials:
+            if not config.server.startup_quiet:
+                logger.debug("Using IAM access key credentials")
         else:
-            # Log the identity using the credentials (but don't expose sensitive info)
-            sts_client = session.client('sts')
-            identity = sts_client.get_caller_identity()
-            logger.info(f"AWS Identity: Account={identity['Account']}, ARN={identity['Arn']}")
-            
+            # Auto-resolution path
+            if config.aws.is_ecs_environment:
+                if not config.server.startup_quiet:
+                    logger.debug("Using automatic credential resolution (ECS Task Role detected)")
+            elif config.aws.is_ec2_environment:
+                if not config.server.startup_quiet:
+                    logger.debug("Using automatic credential resolution (EC2 Instance Profile detected)")
+            else:
+                if not config.server.startup_quiet:
+                    logger.debug("Using automatic credential resolution (environment variables, AWS config files, or instance profile)")
+        
+        # Log identity info only during startup
+        if not config.server.startup_quiet:
+            logger.debug(f"AWS Identity: Account={identity['Account']}, ARN={identity['Arn']}")
+        
         return session
         
     except Exception as e:
+        logger.warning("No AWS credentials found. Functionality may be limited.")
         logger.error(f"Error creating AWS session: {str(e)}")
-        # Create a minimal session with just region, let boto3 handle auth errors later
-        return boto3.Session(region_name=region)
+        return session
 
 def get_client(
     service_name: str, 

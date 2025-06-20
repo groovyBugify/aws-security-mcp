@@ -389,4 +389,143 @@ async def get_iam_policy_batch(
             "success_count": 0,
             "error_count": len(policy_arns),
             "total_count": len(policy_arns)
+        }
+
+
+@register_tool()
+async def list_active_access_keys(
+    include_last_used: bool = True,
+    format_response: bool = True,
+    fast_mode: bool = False,
+    session_context: Optional[str] = None
+) -> Dict[str, Any]:
+    """List all active IAM access keys across all users in the AWS account.
+    
+    This tool provides a comprehensive overview of all active access keys in the account,
+    including which users they belong to and their usage patterns. This is essential for
+    security auditing and access key lifecycle management.
+    
+    Performance optimized with concurrent processing for large AWS accounts.
+    
+    Args:
+        include_last_used: Whether to include last used information for each key (slower but more detailed)
+        format_response: Whether to format the response for security analysis
+        fast_mode: If True, skips last used data and formatting for fastest response (count only)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        
+    Returns:
+        Dict containing active access keys count, user mapping, and detailed information
+    """
+    try:
+        # Fast mode overrides include_last_used for maximum speed
+        if fast_mode:
+            include_last_used = False
+            format_response = False
+        
+        # Get the active access keys from the service
+        keys_response = iam_service.list_active_access_keys(
+            include_last_used=include_last_used,
+            session_context=session_context
+        )
+        
+        # Fast mode returns minimal data
+        if fast_mode:
+            summary = keys_response.get('summary', {})
+            return {
+                'fast_mode': True,
+                'total_active_access_keys': summary.get('total_active_access_keys', 0),
+                'users_with_active_keys': summary.get('users_with_active_keys', 0),
+                'total_users_processed': summary.get('total_users_processed', 0),
+                'processing_time_seconds': summary.get('processing_time_seconds', 0),
+                'status': 'success'
+            }
+        
+        # Format the response if requested
+        if format_response:
+            summary = keys_response.get('summary', {})
+            users_with_keys = keys_response.get('users_with_keys', {})
+            all_active_keys = keys_response.get('all_active_keys', [])
+            
+            # Format access keys - convert service format to AWS API format for formatter
+            formatted_keys = []
+            for key in all_active_keys:
+                # Convert service format to AWS API format
+                aws_format_key = {
+                    'AccessKeyId': key.get('access_key_id'),
+                    'Status': key.get('status'),
+                    'CreateDate': key.get('create_date'),
+                    'UserName': key.get('user_name')
+                }
+                
+                formatted_key = iam_formatter.format_access_key(
+                    aws_format_key, 
+                    key.get('last_used') if include_last_used else None
+                )
+                formatted_keys.append(formatted_key)
+            
+            # Format users with their keys
+            formatted_users = {}
+            for user_name, user_data in users_with_keys.items():
+                # Convert service format to AWS API format for user
+                aws_format_user = {
+                    'UserName': user_data.get('user_name'),
+                    'UserId': user_data.get('user_id'),
+                    'Arn': user_data.get('arn'),
+                    'CreateDate': user_data.get('create_date'),
+                    'Path': '/',  # Default path
+                    'Tags': []
+                }
+                
+                formatted_user_keys = []
+                for key in user_data.get('active_access_keys', []):
+                    # Convert service format to AWS API format
+                    aws_format_key = {
+                        'AccessKeyId': key.get('access_key_id'),
+                        'Status': key.get('status'),
+                        'CreateDate': key.get('create_date'),
+                        'UserName': key.get('user_name')
+                    }
+                    
+                    formatted_key = iam_formatter.format_access_key(
+                        aws_format_key,
+                        key.get('last_used') if include_last_used else None
+                    )
+                    formatted_user_keys.append(formatted_key)
+                
+                formatted_users[user_name] = {
+                    'user_info': iam_formatter.format_user(aws_format_user),
+                    'active_access_keys': formatted_user_keys,
+                    'active_key_count': user_data.get('active_key_count', 0)
+                }
+            
+            response = {
+                'summary': summary,
+                'users_with_active_keys': formatted_users,
+                'all_active_keys': formatted_keys,
+                'status': 'success'
+            }
+            
+            # Include processing errors if any occurred
+            if 'processing_errors' in keys_response:
+                response['processing_errors'] = keys_response['processing_errors']
+            
+            return response
+        
+        return keys_response
+    
+    except Exception as e:
+        logger.error(f"Error listing active access keys: {str(e)}")
+        return {
+            "error": str(e),
+            "status": "error",
+            "summary": {
+                "total_active_access_keys": 0,
+                "users_with_active_keys": 0,
+                "total_users_processed": 0,
+                "users_without_active_keys": 0,
+                "processing_time_seconds": 0,
+                "processing_errors_count": 0
+            },
+            "users_with_active_keys": {},
+            "all_active_keys": []
         } 

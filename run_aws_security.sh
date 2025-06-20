@@ -11,7 +11,7 @@ show_usage() {
     echo "Modes:"
     echo "  stdio  - Standard I/O transport (default, for Claude Desktop)"
     echo "  http   - HTTP REST API server (port 8000)"
-    echo "  sse    - Server-Sent Events transport (port 8001)"
+    echo "  sse    - Server-Sent Events transport (port 8000)"
     echo "  help   - Show this help message"
     echo ""
     echo "Examples:"
@@ -46,6 +46,9 @@ export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 # export AWS_PROFILE=default
 # export AWS_DEFAULT_REGION=us-east-1
 
+# Configuration: Edit config.yaml for most settings (recommended)
+# or use environment variables (see README.md for details)
+
 # Get mode argument (default to stdio)
 MODE=${1:-stdio}
 
@@ -62,9 +65,9 @@ case $MODE in
         ;;
     sse)
         echo "📡 Starting Server-Sent Events server"
-        echo "🔗 SSE endpoint: http://127.0.0.1:8001/sse"
-        echo "📨 Messages endpoint: http://127.0.0.1:8001/messages"
-        echo "🔍 Health check: http://127.0.0.1:8001/health"
+        echo "🔗 SSE endpoint: http://127.0.0.1:8000/sse"
+        echo "📨 Messages endpoint: http://127.0.0.1:8000/messages"
+        echo "🔍 Health check: http://127.0.0.1:8000/health"
         ;;
     *)
         echo "❌ Unknown mode: $MODE"

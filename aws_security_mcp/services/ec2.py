@@ -1050,7 +1050,7 @@ def describe_addresses(
     session_context: Optional[str] = None,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
-    """Describe Elastic IP addresses with filtering options.
+    """Describe Elastic IP addresses.
     
     Args:
         allocation_ids: List of allocation IDs to describe
@@ -1060,7 +1060,7 @@ def describe_addresses(
         **kwargs: Additional arguments to pass to the describe_addresses API call
         
     Returns:
-        List[Dict[str, Any]]: List of Elastic IP address information
+        List of Elastic IP address data
     """
     client = get_ec2_client(session_context=session_context)
     
@@ -1082,4 +1082,102 @@ def describe_addresses(
         return response.get('Addresses', [])
     except ClientError as e:
         logger.error(f"Error describing Elastic IP addresses: {e}")
-        return [] 
+        raise
+
+def describe_network_interfaces(
+    network_interface_ids: Optional[List[str]] = None,
+    filters: Optional[List[Dict[str, Any]]] = None,
+    next_token: Optional[str] = None,
+    max_results: Optional[int] = None,
+    session_context: Optional[str] = None,
+    **kwargs: Any
+) -> List[Dict[str, Any]]:
+    """Describe EC2 network interfaces.
+    
+    Args:
+        network_interface_ids: List of network interface IDs to describe
+        filters: List of filters to apply
+        next_token: Token for pagination
+        max_results: Maximum number of results to return per page (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        **kwargs: Additional arguments to pass to the describe_network_interfaces API call
+        
+    Returns:
+        List of network interface data
+    """
+    client = get_ec2_client(session_context=session_context)
+    
+    params = {
+        **kwargs
+    }
+    
+    if network_interface_ids:
+        params['NetworkInterfaceIds'] = network_interface_ids
+    
+    if filters:
+        params['Filters'] = filters
+    
+    if next_token:
+        params['NextToken'] = next_token
+    
+    if max_results:
+        params['MaxResults'] = max_results
+    
+    try:
+        response = client.describe_network_interfaces(**params)
+        return response.get('NetworkInterfaces', [])
+    except ClientError as e:
+        logger.error(f"Error describing network interfaces: {e}")
+        raise
+
+def get_all_network_interfaces(
+    filters: Optional[List[Dict[str, Any]]] = None,
+    network_interface_ids: Optional[List[str]] = None,
+    max_items: Optional[int] = None,
+    session_context: Optional[str] = None,
+    **kwargs: Any
+) -> List[Dict[str, Any]]:
+    """Get all network interfaces with pagination handling using boto3 paginators.
+    
+    Args:
+        filters: List of filters to apply
+        network_interface_ids: List of network interface IDs to describe
+        max_items: Maximum number of network interfaces to return (None for all)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        **kwargs: Additional arguments to pass to the describe_network_interfaces API call
+        
+    Returns:
+        List[Dict[str, Any]]: List of network interfaces
+    """
+    # Set up parameters
+    params = {}
+    if filters:
+        params['Filters'] = filters
+    if network_interface_ids:
+        params['NetworkInterfaceIds'] = network_interface_ids
+    
+    # Add additional parameters
+    params.update(kwargs)
+    
+    # Get paginator
+    paginator = get_paginator('describe_network_interfaces', session_context=session_context)
+    
+    # Configure pagination
+    page_config = {}
+    if max_items:
+        page_config['MaxItems'] = max_items
+    
+    # Get all network interfaces
+    all_interfaces = []
+    
+    try:
+        page_iterator = paginator.paginate(**params, PaginationConfig=page_config)
+        
+        for page in page_iterator:
+            all_interfaces.extend(page.get('NetworkInterfaces', []))
+                
+    except ClientError as e:
+        logger.error(f"Error getting network interfaces: {e}")
+        raise
+    
+    return all_interfaces 

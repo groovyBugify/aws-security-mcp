@@ -536,4 +536,181 @@ async def get_task(cluster: str, task: str, session_context: Optional[str] = Non
             "error": str(e),
             "task": None,
             "cluster": cluster
+        }
+
+async def search_services_by_ecr_repository(repository_name: str, max_clusters: int = 10, max_services_per_cluster: int = 50, session_context: Optional[str] = None) -> Dict[str, Any]:
+    """Search for ECS services that use a specific ECR repository (optimized version).
+    
+    This function uses an optimized approach: instead of checking all task definitions first,
+    it searches through services and checks their task definitions only when needed.
+    Includes limits to prevent timeouts in large environments.
+    
+    Args:
+        repository_name: Name of the ECR repository to search for (e.g., "test-repo")
+        max_clusters: Maximum number of clusters to search (default: 10)
+        max_services_per_cluster: Maximum services per cluster to check (default: 50)
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        
+    Returns:
+        Dict containing services using the specified ECR repository
+    """
+    try:
+        client = get_client('ecs', session_context=session_context)
+        
+        logger.info(f"Searching for ECS services using ECR repository: {repository_name} (max_clusters={max_clusters}, max_services_per_cluster={max_services_per_cluster})")
+        
+        services_using_repository = []
+        task_definitions_checked = set()  # Cache to avoid checking same task def multiple times
+        matching_task_definitions = []
+        clusters_searched = 0
+        total_services_checked = 0
+        
+        # Get clusters (limited)
+        cluster_paginator = client.get_paginator('list_clusters')
+        
+        for cluster_page in cluster_paginator.paginate():
+            cluster_arns = cluster_page.get('clusterArns', [])
+            
+            for cluster_arn in cluster_arns:
+                if clusters_searched >= max_clusters:
+                    logger.info(f"Reached max_clusters limit ({max_clusters}), stopping search")
+                    break
+                    
+                clusters_searched += 1
+                services_in_cluster = 0
+                
+                logger.info(f"Searching cluster {clusters_searched}/{max_clusters}: {cluster_arn.split('/')[-1]}")
+                
+                try:
+                    # Get services for this cluster (limited)
+                    service_paginator = client.get_paginator('list_services')
+                    
+                    for service_page in service_paginator.paginate(cluster=cluster_arn):
+                        service_arns = service_page.get('serviceArns', [])
+                        
+                        if not service_arns:
+                            continue
+                            
+                        # Limit services per cluster
+                        remaining_services = max_services_per_cluster - services_in_cluster
+                        if remaining_services <= 0:
+                            logger.info(f"Reached max_services_per_cluster limit ({max_services_per_cluster}) for cluster")
+                            break
+                            
+                        # Take only what we can process
+                        service_arns = service_arns[:remaining_services]
+                        
+                        # Process services in batches of 10 (AWS limit)
+                        for i in range(0, len(service_arns), 10):
+                            batch = service_arns[i:i+10]
+                            services_in_cluster += len(batch)
+                            total_services_checked += len(batch)
+                            
+                            try:
+                                response = client.describe_services(
+                                    cluster=cluster_arn,
+                                    services=batch
+                                )
+                                
+                                for service in response.get('services', []):
+                                    service_task_def = service.get('taskDefinition', '')
+                                    
+                                    # Skip if we already checked this task definition
+                                    if service_task_def in task_definitions_checked:
+                                        continue
+                                        
+                                    task_definitions_checked.add(service_task_def)
+                                    
+                                    # Check if this task definition uses our ECR repository
+                                    try:
+                                        task_def_response = client.describe_task_definition(taskDefinition=service_task_def)
+                                        task_def = task_def_response.get('taskDefinition', {})
+                                        
+                                        # Check each container definition
+                                        for container in task_def.get('containerDefinitions', []):
+                                            image_uri = container.get('image', '')
+                                            
+                                            # Parse ECR URI to extract repository name
+                                            if '.dkr.ecr.' in image_uri and '.amazonaws.com/' in image_uri:
+                                                try:
+                                                    repo_part = image_uri.split('.amazonaws.com/')[-1]
+                                                    extracted_repo_name = repo_part.split(':')[0]
+                                                    
+                                                    if extracted_repo_name == repository_name:
+                                                        # Found a match!
+                                                        matching_task_def = {
+                                                            'taskDefinitionArn': service_task_def,
+                                                            'family': task_def.get('family'),
+                                                            'revision': task_def.get('revision'),
+                                                            'container_name': container.get('name'),
+                                                            'image_uri': image_uri
+                                                        }
+                                                        
+                                                        if matching_task_def not in matching_task_definitions:
+                                                            matching_task_definitions.append(matching_task_def)
+                                                        
+                                                        services_using_repository.append({
+                                                            'service_name': service.get('serviceName'),
+                                                            'service_arn': service.get('serviceArn'),
+                                                            'cluster_arn': cluster_arn,
+                                                            'cluster_name': cluster_arn.split('/')[-1],
+                                                            'task_definition_arn': service_task_def,
+                                                            'task_definition_family': task_def.get('family'),
+                                                            'task_definition_revision': task_def.get('revision'),
+                                                            'container_name': container.get('name'),
+                                                            'image_uri': image_uri,
+                                                            'status': service.get('status'),
+                                                            'running_count': service.get('runningCount', 0),
+                                                            'desired_count': service.get('desiredCount', 0),
+                                                            'created_at': service.get('createdAt').isoformat() if service.get('createdAt') else None
+                                                        })
+                                                        
+                                                        logger.info(f"Found service using {repository_name}: {service.get('serviceName')}")
+                                                        break  # Found match in this task definition
+                                                        
+                                                except Exception as e:
+                                                    logger.warning(f"Error parsing image URI {image_uri}: {e}")
+                                                    
+                                    except ClientError as e:
+                                        logger.warning(f"Error describing task definition {service_task_def}: {e}")
+                                        
+                            except ClientError as e:
+                                logger.warning(f"Error describing services in cluster {cluster_arn}: {e}")
+                                
+                        if services_in_cluster >= max_services_per_cluster:
+                            break  # Break out of service pagination
+                            
+                except ClientError as e:
+                    logger.warning(f"Error listing services in cluster {cluster_arn}: {e}")
+                    
+            if clusters_searched >= max_clusters:
+                break  # Break out of cluster iteration
+        
+        result = {
+            "success": True,
+            "repository_name": repository_name,
+            "services_using_repository": services_using_repository,
+            "services_count": len(services_using_repository),
+            "matching_task_definitions": len(matching_task_definitions),
+            "task_definitions_found": [td['taskDefinitionArn'] for td in matching_task_definitions],
+            "search_stats": {
+                "clusters_searched": clusters_searched,
+                "total_services_checked": total_services_checked,
+                "unique_task_definitions_checked": len(task_definitions_checked),
+                "max_clusters": max_clusters,
+                "max_services_per_cluster": max_services_per_cluster
+            }
+        }
+        
+        logger.info(f"Search completed: found {len(services_using_repository)} services using {repository_name}")
+        return result
+        
+    except ClientError as e:
+        logger.error(f"Error searching for services using ECR repository {repository_name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "repository_name": repository_name,
+            "services_using_repository": [],
+            "services_count": 0
         } 

@@ -6,6 +6,10 @@ for retrieving IAM roles, users, access keys and policies.
 
 import logging
 from typing import Any, Dict, List, Optional
+import asyncio
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 import boto3
 from botocore.exceptions import ClientError
@@ -429,4 +433,211 @@ def find_access_key(access_key_id: str, session_context: Optional[str] = None) -
     
     except ClientError as e:
         logger.error(f"Error finding access key '{access_key_id}': {str(e)}")
+        raise
+
+def list_active_access_keys(
+    include_last_used: bool = True,
+    session_context: Optional[str] = None
+) -> Dict[str, Any]:
+    """List all active IAM access keys across all users in the account.
+    
+    Args:
+        include_last_used: Whether to include last used information for each key
+        session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
+        
+    Returns:
+        Dict containing active access keys grouped by user with summary statistics
+    """
+    client = get_client('iam', session_context=session_context)
+    
+    def get_user_access_keys(user_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get access keys for a single user."""
+        user_name = user_data.get('UserName')
+        user_active_keys = []
+        
+        try:
+            # List access keys for this user
+            access_key_paginator = client.get_paginator('list_access_keys')
+            for key_page in access_key_paginator.paginate(UserName=user_name):
+                for key in key_page.get('AccessKeyMetadata', []):
+                    # Only include active keys
+                    if key.get('Status') == 'Active':
+                        key_info = {
+                            'access_key_id': key.get('AccessKeyId'),
+                            'status': key.get('Status'),
+                            'create_date': key.get('CreateDate'),
+                            'user_name': user_name
+                        }
+                        user_active_keys.append(key_info)
+            
+            return {
+                'user_name': user_name,
+                'user_data': user_data,
+                'active_keys': user_active_keys,
+                'error': None
+            }
+            
+        except ClientError as e:
+            logger.warning(f"Error getting access keys for user {user_name}: {str(e)}")
+            return {
+                'user_name': user_name,
+                'user_data': user_data,
+                'active_keys': [],
+                'error': str(e)
+            }
+    
+    def get_key_last_used_batch(access_key_ids: List[str]) -> Dict[str, Any]:
+        """Get last used information for multiple access keys."""
+        last_used_info = {}
+        
+        for access_key_id in access_key_ids:
+            try:
+                last_used_response = client.get_access_key_last_used(
+                    AccessKeyId=access_key_id
+                )
+                last_used_info[access_key_id] = last_used_response.get('AccessKeyLastUsed', {})
+            except ClientError as e:
+                logger.warning(f"Could not get last used data for key {access_key_id}: {str(e)}")
+                last_used_info[access_key_id] = None
+        
+        return last_used_info
+    
+    try:
+        start_time = time.time()
+        logger.info("Starting active access keys scan...")
+        
+        # Step 1: Get all users (this is fast)
+        all_users = []
+        users_processed = 0
+        
+        paginator = client.get_paginator('list_users')
+        for page in paginator.paginate():
+            users_batch = page.get('Users', [])
+            all_users.extend(users_batch)
+            users_processed += len(users_batch)
+        
+        logger.info(f"Found {users_processed} users to process")
+        
+        # Step 2: Process users concurrently (much faster)
+        users_with_keys = {}
+        all_active_keys = []
+        total_active_keys = 0
+        users_with_active_keys = 0
+        processing_errors = []
+        
+        # Use ThreadPoolExecutor for concurrent API calls
+        max_workers = min(10, len(all_users))  # Limit concurrent connections
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all user processing tasks
+            future_to_user = {
+                executor.submit(get_user_access_keys, user): user 
+                for user in all_users
+            }
+            
+            # Process completed tasks
+            for future in concurrent.futures.as_completed(future_to_user):
+                result = future.result()
+                
+                if result['error']:
+                    processing_errors.append({
+                        'user_name': result['user_name'],
+                        'error': result['error']
+                    })
+                    continue
+                
+                user_name = result['user_name']
+                user_data = result['user_data']
+                user_active_keys = result['active_keys']
+                
+                if user_active_keys:
+                    users_with_active_keys += 1
+                    total_active_keys += len(user_active_keys)
+                    
+                    users_with_keys[user_name] = {
+                        'user_name': user_name,
+                        'user_id': user_data.get('UserId'),
+                        'arn': user_data.get('Arn'),
+                        'create_date': user_data.get('CreateDate'),
+                        'active_access_keys': user_active_keys,
+                        'active_key_count': len(user_active_keys)
+                    }
+                    
+                    all_active_keys.extend(user_active_keys)
+        
+        processing_time = time.time() - start_time
+        logger.info(f"Processed {users_processed} users in {processing_time:.2f} seconds")
+        logger.info(f"Found {total_active_keys} active access keys across {users_with_active_keys} users")
+        
+        # Step 3: Get last used information in batches (if requested)
+        if include_last_used and all_active_keys:
+            logger.info("Getting last used information for access keys...")
+            last_used_start = time.time()
+            
+            # Extract all access key IDs
+            access_key_ids = [key['access_key_id'] for key in all_active_keys]
+            
+            # Process in batches to avoid overwhelming the API
+            batch_size = 20  # Process 20 keys at a time
+            last_used_data = {}
+            
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # Create batches
+                batches = [
+                    access_key_ids[i:i + batch_size] 
+                    for i in range(0, len(access_key_ids), batch_size)
+                ]
+                
+                # Submit batch processing tasks
+                future_to_batch = {
+                    executor.submit(get_key_last_used_batch, batch): batch 
+                    for batch in batches
+                }
+                
+                # Collect results
+                for future in concurrent.futures.as_completed(future_to_batch):
+                    batch_result = future.result()
+                    last_used_data.update(batch_result)
+            
+            # Update keys with last used information
+            for key in all_active_keys:
+                key_id = key['access_key_id']
+                key['last_used'] = last_used_data.get(key_id)
+            
+            # Update user keys as well
+            for user_name, user_info in users_with_keys.items():
+                for key in user_info['active_access_keys']:
+                    key_id = key['access_key_id']
+                    key['last_used'] = last_used_data.get(key_id)
+            
+            last_used_time = time.time() - last_used_start
+            logger.info(f"Retrieved last used data in {last_used_time:.2f} seconds")
+        
+        # Compile summary statistics
+        total_time = time.time() - start_time
+        summary_stats = {
+            'total_active_access_keys': total_active_keys,
+            'users_with_active_keys': users_with_active_keys,
+            'total_users_processed': users_processed,
+            'users_without_active_keys': users_processed - users_with_active_keys,
+            'processing_time_seconds': round(total_time, 2),
+            'processing_errors_count': len(processing_errors)
+        }
+        
+        logger.info(f"Active access keys scan completed in {total_time:.2f} seconds")
+        
+        result = {
+            'summary': summary_stats,
+            'users_with_keys': users_with_keys,
+            'all_active_keys': all_active_keys
+        }
+        
+        # Include errors if any occurred
+        if processing_errors:
+            result['processing_errors'] = processing_errors
+        
+        return result
+    
+    except ClientError as e:
+        logger.error(f"Error listing active access keys: {str(e)}")
         raise 

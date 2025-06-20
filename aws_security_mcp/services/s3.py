@@ -1,6 +1,13 @@
 """S3 service module for AWS Security MCP.
 
 This module provides functions for interacting with AWS S3.
+
+CROSS-ACCOUNT ACCESS FIXES:
+- Optimized session context handling to prevent loops
+- Reduced concurrency for cross-account operations (max 3 workers vs 10)
+- Added proper timeouts and error handling
+- Removed redundant account-level public access block calls
+- Added progressive delays between chunks for cross-account access
 """
 
 import json
@@ -196,17 +203,31 @@ def get_account_public_access_block(session_context: Optional[str] = None) -> Op
         Dictionary containing account-level public access block configuration or None if not set
     """
     try:
-        s3control = get_client('s3control', session_context=session_context)
+        # Get the account ID first to ensure we're working with the correct account
         sts_client = get_client('sts', session_context=session_context)
-        account_id = sts_client.get_caller_identity().get('Account')
+        caller_identity = sts_client.get_caller_identity()
+        account_id = caller_identity.get('Account')
+        
+        logger.debug(f"Getting account public access block for account: {account_id}")
+        
+        # Use the same session context for s3control client
+        s3control = get_client('s3control', session_context=session_context)
         response = s3control.get_public_access_block(AccountId=account_id)
+        
+        logger.debug(f"Successfully retrieved account public access block for account: {account_id}")
         return response
+        
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code')
         if error_code == 'NoSuchPublicAccessBlockConfiguration':
             # This is not an error, it just means no configuration exists
+            logger.debug(f"No account-level public access block configuration found")
             return None
-        logger.error(f"Error getting account public access block: {str(e)}")
+        else:
+            logger.error(f"Error getting account public access block: {error_code} - {str(e)}")
+            return None
+    except Exception as e:
+        logger.error(f"Unexpected error getting account public access block: {str(e)}")
         return None
 
 def get_bucket_encryption(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -293,6 +314,29 @@ def get_bucket_lifecycle(bucket_name: str, region: Optional[str] = None, session
         logger.error(f"Error getting bucket lifecycle for {bucket_name}: {str(e)}")
         return None
 
+def get_bucket_tagging(bucket_name: str, region: Optional[str] = None, session_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get bucket tags.
+
+    Args:
+        bucket_name: Name of the S3 bucket
+        region: Optional region to use for regional clients
+        session_context: Optional session key for cross-account access
+
+    Returns:
+        Dictionary containing bucket tags or None if no tags exist
+    """
+    try:
+        client = get_client('s3', region=region, session_context=session_context)
+        response = client.get_bucket_tagging(Bucket=bucket_name)
+        return response
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code')
+        if error_code == 'NoSuchTagSet':
+            # This is not an error, it just means no tags exist
+            return None
+        logger.error(f"Error getting bucket tags for {bucket_name}: {str(e)}")
+        return None
+
 def get_bucket_details(bucket_name: str, session_context: Optional[str] = None) -> Dict[str, Any]:
     """Get detailed information about a specific S3 bucket.
 
@@ -321,9 +365,7 @@ def get_bucket_details(bucket_name: str, session_context: Optional[str] = None) 
         if acl:
             bucket_details['ACL'] = acl
         
-        # Note: We can't await here since this is a sync function
-        # For async access to public_access_block, use get_bucket_details_async
-        # Just provide a warning that public access block might not be included
+        # Get bucket-level public access block configuration
         try:
             # Use boto3 directly for synchronous call
             s3_client = get_client('s3', session_context=session_context)
@@ -332,9 +374,11 @@ def get_bucket_details(bucket_name: str, session_context: Optional[str] = None) 
                 bucket_details['PublicAccessBlock'] = {
                     'PublicAccessBlockConfiguration': resp['PublicAccessBlockConfiguration']
                 }
+        except ClientError as e:
+            if e.response['Error']['Code'] != 'NoSuchPublicAccessBlockConfiguration':
+                logger.warning(f"Could not get public access block for {bucket_name}: {str(e)}")
         except Exception as e:
-            # Not critical, just log and continue
-            logger.warning(f"Could not get public access block for {bucket_name} synchronously: {str(e)}")
+            logger.warning(f"Could not get public access block for {bucket_name}: {str(e)}")
         
         encryption = get_bucket_encryption(bucket_name, region, session_context)
         if encryption:
@@ -352,10 +396,13 @@ def get_bucket_details(bucket_name: str, session_context: Optional[str] = None) 
         if lifecycle:
             bucket_details['Lifecycle'] = lifecycle
             
-        # Get account-level public access block settings
-        account_public_access_block = get_account_public_access_block(session_context)
-        if account_public_access_block:
-            bucket_details['account_public_access_block'] = account_public_access_block
+        # Get bucket tags
+        tagging = get_bucket_tagging(bucket_name, region, session_context)
+        if tagging:
+            bucket_details['Tagging'] = tagging
+            
+        # NOTE: Removed account-level public access block call here to prevent loops
+        # The caller should get this separately if needed
         
         return bucket_details
     except Exception as e:
@@ -420,6 +467,8 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
     }
     
     try:
+        logger.debug(f"Checking public access for bucket: {bucket_name}")
+        
         # Check account-level public access block settings first
         if account_public_access_block:
             block_config = account_public_access_block.get('PublicAccessBlockConfiguration', {})
@@ -464,12 +513,25 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
                 if all_blocked:
                     logger.debug(f"Bucket {bucket_name} protected by bucket-level public access blocks")
                     return False, assessment
+                    
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code in ['AccessDenied', 'NoSuchBucket']:
+                error_msg = f"Cannot access bucket {bucket_name}: {error_code}"
+                logger.warning(error_msg)
+                assessment['errors'].append(error_msg)
+                # If we can't access the bucket, assume it's not public
+                return False, assessment
+            else:
+                error_msg = f"Error getting public access block for {bucket_name}: {error_code}"
+                logger.warning(error_msg)
+                assessment['errors'].append(error_msg)
         except Exception as e:
             error_msg = f"Error getting public access block for {bucket_name}: {str(e)}"
             logger.warning(error_msg)
             assessment['errors'].append(error_msg)
         
-        # Check bucket ACL for public access
+        # Check bucket ACL for public access (only if we have access)
         try:
             acl = get_bucket_acl(bucket_name, session_context=session_context)
             
@@ -481,13 +543,25 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
                         if grantee['URI'] in ['http://acs.amazonaws.com/groups/global/AllUsers', 
                                              'http://acs.amazonaws.com/groups/global/AuthenticatedUsers']:
                             assessment['acl_public'] = True
+                            logger.debug(f"Bucket {bucket_name} has public ACL grant: {grantee['URI']}")
                             break
+                            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code in ['AccessDenied', 'NoSuchBucket']:
+                error_msg = f"Cannot access ACL for bucket {bucket_name}: {error_code}"
+                logger.debug(error_msg)  # Use debug for access denied, as it's common
+                assessment['errors'].append(error_msg)
+            else:
+                error_msg = f"Error getting ACL for {bucket_name}: {error_code}"
+                logger.warning(error_msg)
+                assessment['errors'].append(error_msg)
         except Exception as e:
             error_msg = f"Error getting ACL for {bucket_name}: {str(e)}"
             logger.warning(error_msg)
             assessment['errors'].append(error_msg)
         
-        # Check bucket policy for public access
+        # Check bucket policy for public access (only if we have access)
         try:
             policy = get_bucket_policy(bucket_name, session_context=session_context)
             
@@ -504,13 +578,20 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
                         (isinstance(principal, dict) and principal.get('AWS') == '*')
                     ):
                         assessment['policy_public'] = True
+                        logger.debug(f"Bucket {bucket_name} has public policy")
                         break
+                        
         except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code == 'NoSuchBucketPolicy':
                 # This is normal for buckets without policies
-                pass
+                logger.debug(f"Bucket {bucket_name} has no bucket policy")
+            elif error_code in ['AccessDenied', 'NoSuchBucket']:
+                error_msg = f"Cannot access policy for bucket {bucket_name}: {error_code}"
+                logger.debug(error_msg)  # Use debug for access denied
+                assessment['errors'].append(error_msg)
             else:
-                error_msg = f"Error getting policy for {bucket_name}: {str(e)}"
+                error_msg = f"Error getting policy for {bucket_name}: {error_code}"
                 logger.warning(error_msg)
                 assessment['errors'].append(error_msg)
         except Exception as e:
@@ -521,6 +602,11 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
         # Determine if the bucket is public based on ACL and policy
         is_public = assessment['acl_public'] or assessment['policy_public']
         assessment['is_public'] = is_public
+        
+        if is_public:
+            logger.info(f"Bucket {bucket_name} is PUBLIC - ACL: {assessment['acl_public']}, Policy: {assessment['policy_public']}")
+        else:
+            logger.debug(f"Bucket {bucket_name} is not public")
         
         return is_public, assessment
         
@@ -544,7 +630,10 @@ def find_public_buckets(max_workers: int = 10, session_context: Optional[str] = 
         # Start timing
         start_time = datetime.now()
         
+        logger.info(f"Starting public buckets scan with session_context: {session_context is not None}")
+        
         # Get account-level public access block settings first
+        logger.debug("Getting account-level public access block settings...")
         account_public_access_block = get_account_public_access_block(session_context)
         
         # Check if account-level blocks prevent public access entirely
@@ -571,6 +660,7 @@ def find_public_buckets(max_workers: int = 10, session_context: Optional[str] = 
                 }
         
         # List all buckets
+        logger.debug("Listing all S3 buckets...")
         all_buckets = list_buckets(session_context)
         total_buckets = len(all_buckets)
         
@@ -588,37 +678,68 @@ def find_public_buckets(max_workers: int = 10, session_context: Optional[str] = 
         
         logger.info(f"Checking {total_buckets} S3 buckets for public access")
         
-        # Use a larger chunk size to reduce overhead
-        chunk_size = min(50, total_buckets)
-        max_workers = min(max_workers, chunk_size)
+        # Reduce concurrency to prevent session conflicts - especially important for cross-account access
+        if session_context:
+            # For cross-account access, use much lower concurrency to prevent conflicts
+            max_workers = min(3, max_workers, total_buckets)
+            chunk_size = min(10, total_buckets)
+        else:
+            # For same-account access, we can use higher concurrency
+            max_workers = min(max_workers, 10, total_buckets)
+            chunk_size = min(20, total_buckets)
+        
+        logger.info(f"Using {max_workers} workers with chunk size {chunk_size}")
         
         # Check each bucket for public access
         public_buckets = []
         bucket_assessments = {}
         
-        # Process in batches to avoid overwhelming the API but with fewer chunks
+        # Process in smaller batches to avoid overwhelming the API and prevent session conflicts
         for i in range(0, total_buckets, chunk_size):
             bucket_chunk = all_buckets[i:i+chunk_size]
-            logger.debug(f"Processing bucket chunk {i//chunk_size + 1} of {(total_buckets+chunk_size-1)//chunk_size}")
+            chunk_num = i//chunk_size + 1
+            total_chunks = (total_buckets+chunk_size-1)//chunk_size
             
+            logger.debug(f"Processing bucket chunk {chunk_num} of {total_chunks} ({len(bucket_chunk)} buckets)")
+            
+            # Use a smaller thread pool to prevent session conflicts
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Create a map of futures to buckets for this chunk
-                futures = {
-                    executor.submit(is_bucket_public, bucket['Name'], account_public_access_block, session_context): bucket
-                    for bucket in bucket_chunk
-                }
+                futures = {}
                 
-                # Process results as they complete
-                for future in futures:
+                for bucket in bucket_chunk:
+                    bucket_name = bucket['Name']
+                    future = executor.submit(
+                        is_bucket_public, 
+                        bucket_name, 
+                        account_public_access_block, 
+                        session_context
+                    )
+                    futures[future] = bucket
+                
+                # Process results as they complete with timeout
+                import concurrent.futures
+                for future in concurrent.futures.as_completed(futures, timeout=300):  # 5 minute timeout
                     bucket = futures[future]
                     bucket_name = bucket['Name']
                     
                     try:
-                        is_public, assessment = future.result()
+                        is_public, assessment = future.result(timeout=60)  # 1 minute timeout per bucket
                         bucket_assessments[bucket_name] = assessment
                         
                         if is_public:
                             public_buckets.append(bucket)
+                            logger.info(f"Found public bucket: {bucket_name}")
+                        else:
+                            logger.debug(f"Bucket {bucket_name} is not public")
+                            
+                    except concurrent.futures.TimeoutError:
+                        logger.error(f"Timeout checking if bucket {bucket_name} is public")
+                        bucket_assessments[bucket_name] = {
+                            'bucket_name': bucket_name,
+                            'is_public': False,
+                            'errors': ['Timeout during public access check']
+                        }
                     except Exception as e:
                         logger.error(f"Error checking if bucket {bucket_name} is public: {str(e)}")
                         bucket_assessments[bucket_name] = {
@@ -626,6 +747,11 @@ def find_public_buckets(max_workers: int = 10, session_context: Optional[str] = 
                             'is_public': False,
                             'errors': [str(e)]
                         }
+            
+            # Add a small delay between chunks when using cross-account access to prevent rate limiting
+            if session_context and chunk_num < total_chunks:
+                import time
+                time.sleep(0.5)
         
         # Compile the results
         public_buckets_count = len(public_buckets)

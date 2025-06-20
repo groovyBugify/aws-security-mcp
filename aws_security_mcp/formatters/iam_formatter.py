@@ -377,4 +377,144 @@ def format_user_details(user_details: Dict[str, Any]) -> Dict[str, Any]:
         'total_policy_count': len(formatted_attached_policies) + len(formatted_inline_policies)
     }
     
-    return formatted_user_details 
+    return formatted_user_details
+
+def format_active_access_keys_summary(summary_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Format active access keys summary with security insights and recommendations.
+    
+    Args:
+        summary_data: Summary data from list_active_access_keys service function
+        
+    Returns:
+        Dict with formatted summary including security insights
+    """
+    if not summary_data:
+        return {}
+    
+    summary = summary_data.get('summary', {})
+    users_with_keys = summary_data.get('users_with_keys', {})
+    all_active_keys = summary_data.get('all_active_keys', [])
+    
+    # Calculate security metrics
+    total_active_keys = summary.get('total_active_access_keys', 0)
+    users_with_active_keys = summary.get('users_with_active_keys', 0)
+    total_users = summary.get('total_users_processed', 0)
+    
+    # Analyze key age and usage patterns
+    old_keys = []  # Keys older than 90 days
+    unused_keys = []  # Keys not used in last 90 days
+    recently_used_keys = []  # Keys used in last 7 days
+    
+    for key in all_active_keys:
+        create_date = key.get('create_date')
+        last_used = key.get('last_used', {})
+        last_used_date = last_used.get('LastUsedDate') if last_used else None
+        
+        # Calculate key age
+        if create_date and isinstance(create_date, datetime):
+            key_age_days = (datetime.now().replace(tzinfo=None) - create_date.replace(tzinfo=None)).days
+            if key_age_days > 90:
+                old_keys.append({
+                    'access_key_id': key.get('access_key_id'),
+                    'user_name': key.get('user_name'),
+                    'age_days': key_age_days
+                })
+        
+        # Check usage patterns
+        if last_used_date:
+            if isinstance(last_used_date, datetime):
+                days_since_used = (datetime.now().replace(tzinfo=None) - last_used_date.replace(tzinfo=None)).days
+                if days_since_used > 90:
+                    unused_keys.append({
+                        'access_key_id': key.get('access_key_id'),
+                        'user_name': key.get('user_name'),
+                        'days_since_used': days_since_used
+                    })
+                elif days_since_used <= 7:
+                    recently_used_keys.append({
+                        'access_key_id': key.get('access_key_id'),
+                        'user_name': key.get('user_name'),
+                        'days_since_used': days_since_used
+                    })
+        else:
+            # No usage data available - potentially unused
+            unused_keys.append({
+                'access_key_id': key.get('access_key_id'),
+                'user_name': key.get('user_name'),
+                'days_since_used': 'unknown'
+            })
+    
+    # Identify users with multiple keys
+    users_with_multiple_keys = {}
+    for user_name, user_data in users_with_keys.items():
+        key_count = user_data.get('active_key_count', 0)
+        if key_count > 1:
+            users_with_multiple_keys[user_name] = {
+                'key_count': key_count,
+                'keys': [key.get('access_key_id') for key in user_data.get('active_access_keys', [])]
+            }
+    
+    # Generate security recommendations
+    recommendations = []
+    if old_keys:
+        recommendations.append(f"Consider rotating {len(old_keys)} access keys older than 90 days")
+    if unused_keys:
+        recommendations.append(f"Review {len(unused_keys)} access keys that haven't been used recently")
+    if users_with_multiple_keys:
+        recommendations.append(f"Review {len(users_with_multiple_keys)} users with multiple access keys")
+    if total_active_keys == 0:
+        recommendations.append("No active access keys found - consider if programmatic access is needed")
+    
+    # Security risk assessment
+    risk_level = "low"
+    risk_factors = []
+    
+    if len(old_keys) > total_active_keys * 0.3:  # More than 30% old keys
+        risk_level = "medium"
+        risk_factors.append("High number of old access keys")
+    
+    if len(unused_keys) > total_active_keys * 0.2:  # More than 20% unused keys
+        risk_level = "medium"
+        risk_factors.append("High number of unused access keys")
+        
+    if len(users_with_multiple_keys) > users_with_active_keys * 0.5:  # More than 50% users have multiple keys
+        if risk_level == "low":
+            risk_level = "medium"
+        risk_factors.append("Many users have multiple access keys")
+    
+    if total_active_keys > 100:  # Large number of keys to manage
+        risk_factors.append("Large number of access keys to manage")
+    
+    # Compile formatted summary
+    formatted_summary = {
+        'overview': {
+            'total_active_access_keys': total_active_keys,
+            'users_with_active_keys': users_with_active_keys,
+            'total_users_in_account': total_users,
+            'users_without_keys': total_users - users_with_active_keys,
+            'average_keys_per_user': round(total_active_keys / users_with_active_keys, 2) if users_with_active_keys > 0 else 0
+        },
+        'security_analysis': {
+            'old_keys_count': len(old_keys),
+            'unused_keys_count': len(unused_keys),
+            'recently_used_keys_count': len(recently_used_keys),
+            'users_with_multiple_keys_count': len(users_with_multiple_keys),
+            'risk_level': risk_level,
+            'risk_factors': risk_factors
+        },
+        'detailed_findings': {
+            'old_keys': old_keys[:10],  # Limit to first 10 for readability
+            'unused_keys': unused_keys[:10],  # Limit to first 10 for readability
+            'users_with_multiple_keys': users_with_multiple_keys
+        },
+        'recommendations': recommendations,
+        'compliance_notes': [
+            "Regularly rotate access keys (recommended every 90 days)",
+            "Remove unused access keys to reduce attack surface",
+            "Implement access key usage monitoring",
+            "Consider using IAM roles instead of long-term access keys where possible",
+            "Implement least privilege access for all access keys"
+        ]
+    }
+    
+    return formatted_summary 

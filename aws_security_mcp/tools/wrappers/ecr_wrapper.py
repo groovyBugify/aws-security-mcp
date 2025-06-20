@@ -82,6 +82,11 @@ async def ecr_security_operations(operation: str, session_context: Optional[str]
     """
     
     logger.info(f"ECR operation requested: {operation} (session_context={session_context})")
+    logger.info(f"Parameters received: {params}")
+    
+    # Handle nested params object from Claude Desktop
+    if "params" in params and isinstance(params["params"], dict):
+        params = params["params"]
     
     try:
         if operation == "list_repositories":
@@ -100,40 +105,76 @@ async def ecr_security_operations(operation: str, session_context: Optional[str]
             return json.dumps(result, default=str)
             
         elif operation == "get_repository_policy":
-            repository_name = params.get("repository_name")
+            # Try multiple ways to get repository_name to handle different parameter formats
+            repository_name = (
+                params.get("repository_name") or
+                params.get("repositoryName") or  
+                params.get("repo_name") or
+                params.get("name")
+            )
+            
+            logger.info(f"Extracted repository_name: '{repository_name}' from params: {params}")
+            
             if not repository_name:
                 return json.dumps({
                     "error": "repository_name parameter is required for get_repository_policy",
+                    "received_params": params,
                     "usage": "operation='get_repository_policy', repository_name='my-app'"
                 })
             
-            result = await _get_ecr_repository_policy(repository_name=repository_name, session_context=session_context)
+            result = await _get_ecr_repository_policy(repository_name, session_context=session_context)
             return json.dumps(result, default=str)
             
         elif operation == "get_repository_images":
-            repository_name = params.get("repository_name")
+            # Try multiple ways to get repository_name to handle different parameter formats
+            repository_name = (
+                params.get("repository_name") or
+                params.get("repositoryName") or  
+                params.get("repo_name") or
+                params.get("name")
+            )
+            
+            logger.info(f"Extracted repository_name: '{repository_name}' from params: {params}")
+            
             if not repository_name:
                 return json.dumps({
                     "error": "repository_name parameter is required for get_repository_images",
+                    "received_params": params,
                     "usage": "operation='get_repository_images', repository_name='my-app'"
                 })
             
-            result = await _get_ecr_repository_images(repository_name=repository_name, session_context=session_context)
+            result = await _get_ecr_repository_images(repository_name, session_context=session_context)
             return json.dumps(result, default=str)
             
         elif operation == "get_image_scan_findings":
-            repository_name = params.get("repository_name")
+            # Try multiple ways to get repository_name to handle different parameter formats
+            repository_name = (
+                params.get("repository_name") or
+                params.get("repositoryName") or  
+                params.get("repo_name") or
+                params.get("name")
+            )
+            
+            # Try multiple ways to get image_tag
+            image_tag = (
+                params.get("image_tag") or
+                params.get("imageTag") or
+                params.get("tag") or
+                "latest"
+            )
+            
+            logger.info(f"Extracted repository_name: '{repository_name}', image_tag: '{image_tag}' from params: {params}")
+            
             if not repository_name:
                 return json.dumps({
                     "error": "repository_name parameter is required for get_image_scan_findings",
+                    "received_params": params,
                     "usage": "operation='get_image_scan_findings', repository_name='my-app', image_tag='latest'"
                 })
             
-            image_tag = params.get("image_tag", "latest")
-            
             result = await _get_ecr_image_scan_findings(
-                repository_name=repository_name,
-                image_tag=image_tag,
+                repository_name, 
+                image_tag, 
                 session_context=session_context
             )
             return json.dumps(result, default=str)

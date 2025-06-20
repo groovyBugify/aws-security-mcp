@@ -152,6 +152,81 @@ def format_guardduty_finding_json(finding: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def format_guardduty_findings_list_statistics_json(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Generate and format statistics from a list of GuardDuty findings.
+    
+    Args:
+        findings: List of GuardDuty finding data dictionaries
+        
+    Returns:
+        Dictionary with formatted statistics data similar to format_guardduty_findings_statistics_json
+    """
+    if not findings:
+        return {
+            "total_findings": 0,
+            "by_severity": {
+                "high": 0,
+                "medium": 0,
+                "low": 0
+            },
+            "severity_distribution": {
+                "high_percent": 0,
+                "medium_percent": 0,
+                "low_percent": 0
+            },
+            "top_finding_types": []
+        }
+    
+    # Count findings by severity
+    high_severity = 0
+    medium_severity = 0
+    low_severity = 0
+    
+    # Count findings by type
+    type_counts = {}
+    
+    for finding in findings:
+        severity = finding.get('Severity', 0)
+        
+        # Categorize by severity
+        if severity >= 7.0:
+            high_severity += 1
+        elif severity >= 4.0:
+            medium_severity += 1
+        else:
+            low_severity += 1
+        
+        # Count by finding type
+        finding_type = finding.get('Type', 'Unknown')
+        type_counts[finding_type] = type_counts.get(finding_type, 0) + 1
+    
+    total_count = len(findings)
+    
+    # Get top 5 finding types
+    top_types = []
+    for type_name, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
+        top_types.append({
+            "type": type_name,
+            "count": count,
+            "percentage": round((count / total_count * 100) if total_count > 0 else 0, 1)
+        })
+    
+    return {
+        "total_findings": total_count,
+        "by_severity": {
+            "high": high_severity,
+            "medium": medium_severity,
+            "low": low_severity
+        },
+        "severity_distribution": {
+            "high_percent": round((high_severity / total_count * 100) if total_count > 0 else 0, 1),
+            "medium_percent": round((medium_severity / total_count * 100) if total_count > 0 else 0, 1),
+            "low_percent": round((low_severity / total_count * 100) if total_count > 0 else 0, 1)
+        },
+        "top_finding_types": top_types
+    }
+
+
 def format_guardduty_findings_statistics_json(statistics: Dict[str, Any]) -> Dict[str, Any]:
     """Format GuardDuty findings statistics into structured data for JSON output.
     

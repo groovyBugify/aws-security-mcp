@@ -57,7 +57,7 @@ async def s3_security_operations(operation: str, session_context: Optional[str] 
         JSON formatted response with operation results and S3 security insights
     """
     
-    logger.info(f"S3 operation requested: {operation}")
+    logger.info(f"S3 operation requested: {operation} (cross-account: {session_context is not None})")
     
     # Handle nested params object from Claude Desktop
     if "params" in params and isinstance(params["params"], dict):
@@ -65,7 +65,8 @@ async def s3_security_operations(operation: str, session_context: Optional[str] 
     
     try:
         if operation == "list_buckets":
-            return json.dumps(await _list_s3_buckets(session_context=session_context))
+            result = await _list_s3_buckets(session_context=session_context)
+            return json.dumps(result)
             
         elif operation == "get_bucket_details":
             bucket_name = params.get("bucket_name")
@@ -75,7 +76,8 @@ async def s3_security_operations(operation: str, session_context: Optional[str] 
                     "usage": "operation='get_bucket_details', bucket_name='my-bucket'"
                 })
             
-            return json.dumps(await _get_s3_bucket_details(bucket_name=bucket_name, session_context=session_context))
+            result = await _get_s3_bucket_details(bucket_name=bucket_name, session_context=session_context)
+            return json.dumps(result)
             
         elif operation == "analyze_bucket_security":
             bucket_name = params.get("bucket_name")
@@ -85,10 +87,15 @@ async def s3_security_operations(operation: str, session_context: Optional[str] 
                     "usage": "operation='analyze_bucket_security', bucket_name='my-bucket'"
                 })
             
-            return json.dumps(await _analyze_s3_bucket_security(bucket_name=bucket_name, session_context=session_context))
+            result = await _analyze_s3_bucket_security(bucket_name=bucket_name, session_context=session_context)
+            return json.dumps(result)
             
         elif operation == "find_public_buckets":
-            return json.dumps(await _find_public_buckets(session_context=session_context))
+            # Add extra logging for this operation due to previous cross-account issues
+            logger.info("Starting find_public_buckets operation...")
+            result = await _find_public_buckets(session_context=session_context)
+            logger.info("Completed find_public_buckets operation")
+            return json.dumps(result)
             
         else:
             # Provide helpful error with available operations
@@ -115,7 +122,8 @@ async def s3_security_operations(operation: str, session_context: Optional[str] 
                 "message": f"Error executing S3 operation '{operation}': {str(e)}",
                 "type": type(e).__name__,
                 "operation": operation,
-                "parameters": params
+                "parameters": params,
+                "session_context_provided": session_context is not None
             }
         })
 
