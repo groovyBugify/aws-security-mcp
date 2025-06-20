@@ -52,6 +52,19 @@ cross_account:
   # Performance settings  
   max_concurrent_assumptions: 5        # Max concurrent role assumptions
 
+# Athena Configuration
+athena:
+  # Default S3 bucket for Athena query results
+  # IMPORTANT: This bucket must exist and your MCP server must have read/write access
+  # Format: s3://your-athena-results-bucket/path/ (must end with /)
+  default_output_location: "s3://mcp-athena-results-YOUR-ACCOUNT-ID-YOUR-REGION/"
+  
+  # Default workgroup for Athena queries
+  default_workgroup: "primary"
+  
+  # Default catalog name (usually AwsDataCatalog)
+  default_catalog: "AwsDataCatalog"
+
 # QUICK CONFIGURATION EXAMPLES:
 #
 # For minimal output (like your request):

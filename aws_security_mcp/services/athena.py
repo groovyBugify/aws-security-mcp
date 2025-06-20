@@ -14,6 +14,7 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from aws_security_mcp.services.base import get_client, handle_aws_error, format_pagination_response
+from aws_security_mcp.config import config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -239,9 +240,9 @@ def get_table_metadata(
 def start_query_execution(
     query_string: str,
     database: str,
-    output_location: str,
+    output_location: Optional[str] = None,
     catalog_name: Optional[str] = None,
-    workgroup: str = 'primary',
+    workgroup: Optional[str] = None,
     description: Optional[str] = None,
     session_context: Optional[str] = None
 ) -> Optional[str]:
@@ -250,9 +251,9 @@ def start_query_execution(
     Args:
         query_string: The SQL query string to execute
         database: Database to run the query against
-        output_location: S3 location for query results (s3://bucket/path/)
-        catalog_name: Name of the data catalog (if None, defaults to AwsDataCatalog)
-        workgroup: Athena workgroup to use (default: primary)
+        output_location: S3 location for query results (if None, uses default from config)
+        catalog_name: Name of the data catalog (if None, uses default from config)
+        workgroup: Athena workgroup to use (if None, uses default from config)
         description: Optional description for the query
         session_context: Optional session key for cross-account access
 
@@ -262,9 +263,13 @@ def start_query_execution(
     try:
         client = get_client('athena', session_context=session_context)
         
-        # Default to AwsDataCatalog if not specified, but allow override
+        # Use config defaults if not specified
+        if output_location is None:
+            output_location = config.athena.default_output_location
         if catalog_name is None:
-            catalog_name = 'AwsDataCatalog'
+            catalog_name = config.athena.default_catalog
+        if workgroup is None:
+            workgroup = config.athena.default_workgroup
         
         query_context = {
             'Database': database,
@@ -551,9 +556,9 @@ def list_query_executions(
 def execute_query_async(
     query_string: str,
     database: str,
-    output_location: str,
+    output_location: Optional[str] = None,
     catalog_name: Optional[str] = None,
-    workgroup: str = 'primary',
+    workgroup: Optional[str] = None,
     description: Optional[str] = None,
     session_context: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -565,9 +570,9 @@ def execute_query_async(
     Args:
         query_string: The SQL query string to execute
         database: Database to run the query against
-        output_location: S3 location for query results
-        catalog_name: Name of the data catalog (if None, defaults to AwsDataCatalog)
-        workgroup: Athena workgroup to use (default: primary)
+        output_location: S3 location for query results (if None, uses default from config)
+        catalog_name: Name of the data catalog (if None, uses default from config)
+        workgroup: Athena workgroup to use (if None, uses default from config)
         description: Optional description for the query
         session_context: Optional session key for cross-account access
 
@@ -575,6 +580,14 @@ def execute_query_async(
         Dict containing query execution ID and initial status
     """
     try:
+        # Use config defaults if not specified
+        if output_location is None:
+            output_location = config.athena.default_output_location
+        if catalog_name is None:
+            catalog_name = config.athena.default_catalog
+        if workgroup is None:
+            workgroup = config.athena.default_workgroup
+            
         # Start query execution
         query_execution_id = start_query_execution(
             query_string=query_string,

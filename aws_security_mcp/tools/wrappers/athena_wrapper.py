@@ -52,8 +52,8 @@ async def athena_security_operations(operation: str, session_context: Optional[s
     🚀 Execute query (returns execution ID immediately):
     operation="execute_query", 
     query_string="SELECT eventname, sourceipaddress, eventtime FROM cloudtrail_events WHERE year='2024' AND month='01' AND day='15' LIMIT 100",
-    database="cloudtrail_logs",
-    output_location="s3://my-athena-results/queries/"
+    database="cloudtrail_logs"
+    # output_location is optional - uses config default if not specified
     
     🔄 Check if query is complete:
     operation="check_query_complete", query_execution_id="12345678-1234-1234-1234-123456789012"
@@ -76,8 +76,8 @@ async def athena_security_operations(operation: str, session_context: Optional[s
         # Query execution parameters:
         query_string: SQL query to execute (required for query operations)
         database: Database to run query against (required for query operations)
-        output_location: S3 location for results (required for query operations, format: s3://bucket/path/)
-        workgroup: Athena workgroup (default: primary)
+        output_location: S3 location for results (optional - uses config default if not specified)
+        workgroup: Athena workgroup (optional - uses config default if not specified)
         description: Optional query description
         
         # Query status/results parameters:
@@ -150,27 +150,21 @@ async def athena_security_operations(operation: str, session_context: Optional[s
         elif operation == "execute_query":
             query_string = params.get("query_string")
             database = params.get("database")
-            output_location = params.get("output_location")
+            output_location = params.get("output_location")  # Optional - will use config default if None
             catalog_name = params.get("catalog_name")
-            workgroup = params.get("workgroup", "primary")
+            workgroup = params.get("workgroup")
             description = params.get("description")
             
             if not query_string:
                 return json.dumps({
                     "error": "query_string parameter is required for execute_query",
-                    "usage": "operation='execute_query', query_string='SELECT ...', database='my_db', output_location='s3://bucket/path/'"
+                    "usage": "operation='execute_query', query_string='SELECT ...', database='my_db'"
                 })
             
             if not database:
                 return json.dumps({
                     "error": "database parameter is required for execute_query",
-                    "usage": "operation='execute_query', query_string='SELECT ...', database='my_db', output_location='s3://bucket/path/'"
-                })
-            
-            if not output_location:
-                return json.dumps({
-                    "error": "output_location parameter is required for execute_query (format: s3://bucket/path/)",
-                    "usage": "operation='execute_query', query_string='SELECT ...', database='my_db', output_location='s3://bucket/path/'"
+                    "usage": "operation='execute_query', query_string='SELECT ...', database='my_db'"
                 })
             
             result = await _execute_athena_query(
@@ -247,7 +241,7 @@ async def athena_security_operations(operation: str, session_context: Optional[s
                     "list_catalogs": "operation='list_catalogs'",
                     "list_databases": "operation='list_databases'",
                     "get_table_schema": "operation='get_table_schema', database_name='my_db', table_name='my_table'",
-                    "execute_query": "operation='execute_query', query_string='SELECT ...', database='my_db', output_location='s3://bucket/path/'",
+                    "execute_query": "operation='execute_query', query_string='SELECT ...', database='my_db'",
                     "check_query_complete": "operation='check_query_complete', query_execution_id='12345678-1234-1234-1234-123456789012'",
                     "get_query_status": "operation='get_query_status', query_execution_id='12345678-1234-1234-1234-123456789012'",
                     "get_query_results": "operation='get_query_results', query_execution_id='12345678-1234-1234-1234-123456789012'"

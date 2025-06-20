@@ -60,6 +60,11 @@ def load_yaml_config() -> Dict[str, Any]:
             "auto_setup_on_startup": True,
             "auto_refresh_enabled": True,
             "max_concurrent_assumptions": 5
+        },
+        "athena": {
+            "default_output_location": "s3://mcp-athena-results-change-this-bucket/",
+            "default_workgroup": "primary",
+            "default_catalog": "AwsDataCatalog"
         }
     }
 
@@ -193,6 +198,36 @@ class CrossAccountConfig(BaseModel):
         description="Maximum number of concurrent role assumptions"
     )
 
+class AthenaConfig(BaseModel):
+    """Athena configuration settings."""
+    
+    default_output_location: str = Field(
+        description="Default S3 location for Athena query results"
+    )
+    default_workgroup: str = Field(
+        description="Default Athena workgroup for queries"
+    )
+    default_catalog: str = Field(
+        description="Default data catalog for Athena queries"
+    )
+    
+    @validator('default_output_location')
+    def validate_output_location(cls, v: str) -> str:
+        """Validate S3 output location format."""
+        if not v:
+            raise ValueError("Default output location cannot be empty")
+        
+        if not v.startswith('s3://'):
+            raise ValueError("Default output location must be a valid S3 URI starting with 's3://'")
+        
+        if v == 's3://':
+            raise ValueError("Default output location must include bucket name")
+        
+        if not v.endswith('/'):
+            raise ValueError("Default output location should end with '/' to specify a directory")
+        
+        return v
+
 class MCPServerConfig(BaseModel):
     """MCP server configuration settings."""
     
@@ -238,6 +273,7 @@ class AppConfig(BaseModel):
     aws: AWSConfig
     server: MCPServerConfig
     cross_account: CrossAccountConfig
+    athena: AthenaConfig
     
     class Config:
         """Pydantic config options."""
@@ -291,11 +327,20 @@ def load_config() -> AppConfig:
         "max_concurrent_assumptions": int(os.getenv("MCP_MAX_CONCURRENT_ASSUMPTIONS") or cross_account_yaml.get("max_concurrent_assumptions")),
     }
     
+    # Athena configuration - YAML defaults with environment overrides
+    athena_yaml = yaml_config.get("athena", {})
+    athena_config = {
+        "default_output_location": os.getenv("MCP_ATHENA_OUTPUT_LOCATION") or athena_yaml.get("default_output_location"),
+        "default_workgroup": os.getenv("MCP_ATHENA_WORKGROUP") or athena_yaml.get("default_workgroup"),
+        "default_catalog": os.getenv("MCP_ATHENA_CATALOG") or athena_yaml.get("default_catalog"),
+    }
+    
     # Create the config object
     app_config = AppConfig(
         aws=AWSConfig(**aws_config),
         server=MCPServerConfig(**server_config),
         cross_account=CrossAccountConfig(**cross_account_config),
+        athena=AthenaConfig(**athena_config),
     )
     
     # Verify AWS credential configuration and log information

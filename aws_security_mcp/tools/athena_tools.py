@@ -195,9 +195,9 @@ async def get_athena_table_schema(
 async def execute_athena_query(
     query_string: str,
     database: str,
-    output_location: str,
+    output_location: Optional[str] = None,
     catalog_name: Optional[str] = None,
-    workgroup: str = 'primary',
+    workgroup: Optional[str] = None,
     description: Optional[str] = None,
     session_context: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -210,9 +210,9 @@ async def execute_athena_query(
     Args:
         query_string: The SQL query string to execute
         database: Database to run the query against
-        output_location: S3 location for query results (s3://bucket/path/)
-        catalog_name: Name of the data catalog (if None, defaults to AwsDataCatalog)
-        workgroup: Athena workgroup to use (default: primary)
+        output_location: S3 location for query results (if None, uses default from config)
+        catalog_name: Name of the data catalog (if None, uses default from config)
+        workgroup: Athena workgroup to use (if None, uses default from config)
         description: Optional description for the query
         session_context: Optional session key for cross-account access (e.g., "123456789012_aws_dev")
 
@@ -220,10 +220,18 @@ async def execute_athena_query(
         Dict containing query execution ID and initial status (use for polling)
     """
     try:
+        logger.info(f"Executing Athena query in {database}")
+        
+        # Import config here to avoid circular imports
+        from aws_security_mcp.config import config
+        
+        # Use config defaults if not specified (for validation)
+        if output_location is None:
+            output_location = config.athena.default_output_location
         if catalog_name is None:
-            catalog_name = 'AwsDataCatalog'
-            
-        logger.info(f"Executing Athena query in {catalog_name}.{database}")
+            catalog_name = config.athena.default_catalog
+        if workgroup is None:
+            workgroup = config.athena.default_workgroup
         
         # Validate query parameters
         is_valid, error_message = athena.validate_query_parameters(
