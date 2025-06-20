@@ -463,54 +463,82 @@ def generate_query_recommendations(query_string: str, database: str) -> List[Dic
         List of recommendation dictionaries
     """
     recommendations = []
-    query_upper = query_string.upper()
+    query_upper = query_string.upper().strip()
     
     try:
-        # Check for date filtering on CloudTrail/VPC Flow Logs
-        if any(table in query_upper for table in ['CLOUDTRAIL', 'VPC_FLOW_LOGS', 'VPCFLOWLOGS']):
-            if not any(date_filter in query_upper for date_filter in ['WHERE', 'LIMIT', 'DATE', 'TIMESTAMP']):
-                recommendations.append({
-                    'type': 'performance',
-                    'severity': 'high',
-                    'title': 'Add date/time filters',
-                    'description': 'CloudTrail and VPC Flow Logs tables can be very large. Add WHERE clauses with date/time filters to limit the data scanned and improve performance.'
-                })
-        
-        # Check for LIMIT clause
-        if 'LIMIT' not in query_upper:
+        # Skip recommendations for SHOW, DESCRIBE, and EXPLAIN commands as they are metadata queries
+        if query_upper.startswith(('SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN')):
             recommendations.append({
-                'type': 'performance',
-                'severity': 'medium',
-                'title': 'Consider adding LIMIT clause',
-                'description': 'Adding a LIMIT clause can help control the size of result sets and prevent unexpectedly large query results.'
+                'type': 'info',
+                'severity': 'low',
+                'title': 'Metadata query detected',
+                'description': 'This is a metadata query (SHOW/DESCRIBE/EXPLAIN) which is safe and requires no additional optimizations.'
             })
+            return recommendations
         
-        # Check for SELECT *
-        if 'SELECT *' in query_upper:
-            recommendations.append({
-                'type': 'performance',
-                'severity': 'medium',
-                'title': 'Avoid SELECT *',
-                'description': 'Select only the columns you need instead of using SELECT * to reduce data transfer and improve query performance.'
-            })
-        
-        # Check for partitioning hints
-        if any(table in query_upper for table in ['CLOUDTRAIL', 'VPC_FLOW_LOGS', 'VPCFLOWLOGS']):
-            if 'YEAR' not in query_upper and 'MONTH' not in query_upper and 'DAY' not in query_upper:
+        # Only apply performance recommendations to SELECT queries
+        if query_upper.startswith('SELECT'):
+            # Check for date filtering on large tables
+            large_table_patterns = ['CLOUDTRAIL', 'VPC_FLOW_LOGS', 'VPCFLOWLOGS', 'ACCESS_LOGS', 'ALB_LOGS', 'ELB_LOGS']
+            is_querying_large_table = any(pattern in query_upper for pattern in large_table_patterns)
+            
+            if is_querying_large_table:
+                has_time_filter = any(
+                    filter_keyword in query_upper 
+                    for filter_keyword in ['WHERE', 'LIMIT', 'DATE', 'TIMESTAMP', 'YEAR', 'MONTH', 'DAY']
+                )
+                if not has_time_filter:
+                    recommendations.append({
+                        'type': 'performance',
+                        'severity': 'high',
+                        'title': 'Add date/time filters for large tables',
+                        'description': 'Large tables like CloudTrail and VPC Flow Logs can be expensive to scan. Add WHERE clauses with date/time filters (WHERE year=\'2024\' AND month=\'01\') or LIMIT clause to control costs and improve performance.'
+                    })
+            
+            # Check for LIMIT clause (only for SELECT queries)
+            if 'LIMIT' not in query_upper and not any(agg in query_upper for agg in ['COUNT(', 'SUM(', 'AVG(', 'GROUP BY']):
                 recommendations.append({
                     'type': 'performance',
                     'severity': 'medium',
-                    'title': 'Use partition pruning',
-                    'description': 'Use partition columns (year, month, day) in your WHERE clause to take advantage of partition pruning and reduce data scanned.'
+                    'title': 'Consider adding LIMIT clause',
+                    'description': 'Adding a LIMIT clause can help control the size of result sets and prevent unexpectedly large query results.'
+                })
+            
+            # Check for SELECT *
+            if 'SELECT *' in query_upper:
+                recommendations.append({
+                    'type': 'performance',
+                    'severity': 'medium',
+                    'title': 'Avoid SELECT *',
+                    'description': 'Select only the columns you need instead of using SELECT * to reduce data transfer and improve query performance.'
+                })
+            
+            # Check for partitioning hints on large tables
+            if is_querying_large_table:
+                if 'YEAR' not in query_upper and 'MONTH' not in query_upper and 'DAY' not in query_upper:
+                    recommendations.append({
+                        'type': 'performance',
+                        'severity': 'medium',
+                        'title': 'Use partition pruning',
+                        'description': 'Use partition columns (year, month, day) in your WHERE clause to take advantage of partition pruning and reduce data scanned.'
+                    })
+            
+            # Security recommendations
+            if any(sensitive in query_upper for sensitive in ['PASSWORD', 'SECRET', 'KEY', 'TOKEN']):
+                recommendations.append({
+                    'type': 'security',
+                    'severity': 'high',
+                    'title': 'Avoid exposing sensitive data',
+                    'description': 'Be careful when querying columns that might contain sensitive information like passwords, secrets, or tokens.'
                 })
         
-        # Security recommendations
-        if any(sensitive in query_upper for sensitive in ['PASSWORD', 'SECRET', 'KEY', 'TOKEN']):
+        # If no recommendations were generated, add a positive note
+        if not recommendations:
             recommendations.append({
-                'type': 'security',
-                'severity': 'high',
-                'title': 'Avoid exposing sensitive data',
-                'description': 'Be careful when querying columns that might contain sensitive information like passwords, secrets, or tokens.'
+                'type': 'info',
+                'severity': 'low',
+                'title': 'Query looks good',
+                'description': 'No specific performance or security recommendations for this query.'
             })
         
     except Exception as e:

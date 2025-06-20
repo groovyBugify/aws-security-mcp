@@ -807,13 +807,37 @@ def validate_query_parameters(
             if keyword in query_upper:
                 return False, f"Query contains potentially dangerous keyword: {keyword}. Only SELECT, SHOW, DESCRIBE, and EXPLAIN queries are allowed for security."
     
-    # Recommend date/time filtering for CloudTrail and VPC Flow Logs
-    if any(table in query_upper for table in ['CLOUDTRAIL', 'VPC_FLOW_LOGS', 'VPCFLOWLOGS']):
-        if not any(date_filter in query_upper for date_filter in ['WHERE', 'LIMIT', 'DATE', 'TIMESTAMP']):
-            return False, "Queries on CloudTrail/VPC Flow Logs should include date/time filters (WHERE year='2024' AND month='01') to limit result size and control costs"
+    # Special handling for SHOW commands - these are always safe and don't need additional restrictions
+    if query_upper.startswith('SHOW'):
+        return True, None
     
-    # Recommend LIMIT clause for large result sets
-    if 'LIMIT' not in query_upper and not any(agg in query_upper for agg in ['COUNT(', 'SUM(', 'AVG(', 'GROUP BY']):
-        logger.warning("Consider adding a LIMIT clause to prevent unexpectedly large result sets")
+    # Special handling for DESCRIBE/DESC commands - these are always safe
+    if query_upper.startswith(('DESCRIBE', 'DESC')):
+        return True, None
+    
+    # Special handling for EXPLAIN commands - these are always safe
+    if query_upper.startswith('EXPLAIN'):
+        return True, None
+    
+    # For SELECT queries, apply additional validation for performance and cost control
+    if query_upper.startswith('SELECT'):
+        # Check if querying large tables that need date filtering
+        large_table_patterns = ['CLOUDTRAIL', 'VPC_FLOW_LOGS', 'VPCFLOWLOGS', 'ACCESS_LOGS', 'ALB_LOGS', 'ELB_LOGS']
+        is_querying_large_table = any(
+            pattern in query_upper for pattern in large_table_patterns
+        )
+        
+        # For large tables, recommend date/time filtering
+        if is_querying_large_table:
+            has_time_filter = any(
+                filter_keyword in query_upper 
+                for filter_keyword in ['WHERE', 'LIMIT', 'DATE', 'TIMESTAMP', 'YEAR', 'MONTH', 'DAY']
+            )
+            if not has_time_filter:
+                return False, "Queries on large tables (CloudTrail/VPC Flow Logs/Access Logs) should include date/time filters (WHERE year='2024' AND month='01') or LIMIT clause to control result size and costs"
+        
+        # General recommendation for LIMIT clause (warning only, not blocking)
+        if 'LIMIT' not in query_upper and not any(agg in query_upper for agg in ['COUNT(', 'SUM(', 'AVG(', 'GROUP BY']):
+            logger.warning("Consider adding a LIMIT clause to prevent unexpectedly large result sets")
     
     return True, None 
