@@ -57,7 +57,7 @@ athena:
   # Default S3 bucket for Athena query results
   # IMPORTANT: This bucket must exist and your MCP server must have read/write access
   # Format: s3://your-athena-results-bucket/path/ (must end with /)
-  default_output_location: "s3://{your_athena_results_bucket_name/"
+  default_output_location: "s3://{your_athena_results_bucket_name}/"
   
   # Default workgroup for Athena queries
   default_workgroup: "primary"
@@ -65,23 +65,3 @@ athena:
   # Default catalog name (usually AwsDataCatalog)
   default_catalog: "AwsDataCatalog"
 
-# QUICK CONFIGURATION EXAMPLES:
-#
-# For minimal output (like your request):
-# server:
-#   log_level: "warning"
-#   startup_quiet: true
-#   tool_quiet: true
-#
-# For debugging:
-# server:
-#   log_level: "debug"
-#   startup_quiet: false
-#   tool_quiet: false
-#
-# For production:
-# server:
-#   log_level: "error"
-#   minimal_logging: true
-#   startup_quiet: true
-#   tool_quiet: true 
