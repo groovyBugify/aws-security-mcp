@@ -13,6 +13,7 @@ from aws_security_mcp.formatters.securityhub import (
     format_standard_json,
     format_control_json
 )
+from botocore.exceptions import ClientError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -41,13 +42,20 @@ async def get_securityhub_findings(limit: int = 10, severity: str = "ALL", searc
             severity_filter = securityhub.create_severity_filter(severity)
             filters.update(severity_filter)
         
-        # Add search term filter if provided
+        # For search terms, we'll use Title filter and then post-process for additional fields
         if search_term:
             search_filter = securityhub.create_search_term_filter(search_term)
             filters.update(search_filter)
         
         # Get findings
-        findings = securityhub.get_all_findings(filters=filters, max_items=limit)
+        findings = securityhub.get_all_findings(filters=filters, max_items=limit * 2)  # Get extra to account for post-filtering
+        
+        # Apply additional search term filtering if needed (post-processing for multi-field search)
+        if search_term:
+            findings = securityhub.filter_findings_by_text(findings, search_term)
+        
+        # Limit to requested number
+        findings = findings[:limit]
         
         if not findings:
             return json.dumps({
@@ -98,35 +106,50 @@ async def list_failed_security_standards(limit: int = 20) -> str:
         # Get SecurityHub client
         client = securityhub.get_securityhub_client()
         
-        # Get standards
-        standards_response = client.describe_standards()
-        standards = standards_response.get('Standards', [])
+        # Check if SecurityHub is enabled
+        try:
+            hub_response = client.describe_hub()
+            if not hub_response:
+                return json.dumps({
+                    "count": 0,
+                    "controls": [],
+                    "message": "SecurityHub is not enabled in this region"
+                })
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'InvalidAccessException':
+                return json.dumps({
+                    "count": 0,
+                    "controls": [],
+                    "message": "SecurityHub is not enabled or insufficient permissions"
+                })
+            raise
         
-        # Get enabled standards
-        enabled_standards = []
-        for standard in standards:
-            standard_subscription_arns = []
-            
-            # Get subscriptions for this standard
-            subscriptions_response = client.get_enabled_standards(
-                StandardsSubscriptionArns=[standard.get('StandardsArn')]
-            )
-            
-            standard_subscriptions = subscriptions_response.get('StandardsSubscriptions', [])
-            if standard_subscriptions:
-                enabled_standards.extend(standard_subscriptions)
+        # Get all enabled standards (subscriptions)
+        enabled_standards_response = client.get_enabled_standards()
+        enabled_standards = enabled_standards_response.get('StandardsSubscriptions', [])
+        
+        if not enabled_standards:
+            return json.dumps({
+                "count": 0,
+                "controls": [],
+                "message": "No security standards are enabled in SecurityHub"
+            })
         
         # Get failed controls for each enabled standard
         failed_controls = []
         
         for standard in enabled_standards:
-            standard_arn = standard.get('StandardsSubscriptionArn')
-            standard_name = standard.get('StandardsArn', '').split('/')[-1]
+            standard_subscription_arn = standard.get('StandardsSubscriptionArn')
+            standard_name = standard.get('StandardsArn', '').split('/')[-1] if standard.get('StandardsArn') else 'Unknown'
             
-            # Get controls for this standard
+            if not standard_subscription_arn:
+                logger.warning(f"Missing StandardsSubscriptionArn for standard: {standard}")
+                continue
+            
+            # Get controls for this standard subscription
             try:
                 controls_response = client.describe_standards_controls(
-                    StandardsSubscriptionArn=standard_arn
+                    StandardsSubscriptionArn=standard_subscription_arn
                 )
                 
                 controls = controls_response.get('Controls', [])
@@ -136,8 +159,12 @@ async def list_failed_security_standards(limit: int = 20) -> str:
                     if control.get('ControlStatus') == 'FAILED':
                         control['StandardName'] = standard_name
                         failed_controls.append(control)
+            except ClientError as e:
+                logger.warning(f"Error getting controls for standard {standard_subscription_arn}: {e}")
+                continue
             except Exception as e:
-                logger.warning(f"Error getting controls for standard {standard_arn}: {e}")
+                logger.warning(f"Unexpected error getting controls for standard {standard_subscription_arn}: {e}")
+                continue
         
         # Limit results
         failed_controls = failed_controls[:limit]
@@ -191,6 +218,24 @@ async def get_account_security_score() -> str:
         # Get SecurityHub client
         client = securityhub.get_securityhub_client()
         
+        # Check if SecurityHub is enabled
+        try:
+            hub_response = client.describe_hub()
+            if not hub_response:
+                return json.dumps({
+                    "message": "SecurityHub is not enabled in this region",
+                    "standards_enabled": 0,
+                    "score": None
+                })
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'InvalidAccessException':
+                return json.dumps({
+                    "message": "SecurityHub is not enabled or insufficient permissions",
+                    "standards_enabled": 0,
+                    "score": None
+                })
+            raise
+        
         # Get enabled standards
         standards_response = client.get_enabled_standards()
         standards = standards_response.get('StandardsSubscriptions', [])
@@ -221,10 +266,15 @@ async def get_account_security_score() -> str:
             'INFORMATIONAL': 0
         }
         
+        # Count findings by severity, with fallback for missing severity
         for finding in findings:
             severity = finding.get('Severity', {}).get('Label', 'INFORMATIONAL')
             if severity in severity_counts:
                 severity_counts[severity] += 1
+            else:
+                # Handle unexpected severity values
+                logger.warning(f"Unknown severity level: {severity}")
+                severity_counts['INFORMATIONAL'] += 1
         
         # Calculate weighted score
         severity_weights = {
@@ -240,25 +290,32 @@ async def get_account_security_score() -> str:
             for severity in severity_counts
         )
         
-        max_possible_weight = sum(
-            total_findings * severity_weights['CRITICAL']
-        ) if total_findings > 0 else 1
+        # Calculate maximum possible weight (if all findings were CRITICAL)
+        max_possible_weight = total_findings * severity_weights['CRITICAL'] if total_findings > 0 else 1
         
         # Calculate score (higher is worse)
         raw_score = (total_weight / max_possible_weight) * 100 if max_possible_weight > 0 else 0
         
-        # Invert score (higher is better)
-        security_score = 100 - raw_score
+        # Invert score (higher is better) and ensure it's between 0-100
+        security_score = max(0, min(100, 100 - raw_score))
+        
+        # Calculate additional metrics
+        high_priority_findings = severity_counts['CRITICAL'] + severity_counts['HIGH']
+        low_priority_findings = severity_counts['MEDIUM'] + severity_counts['LOW'] + severity_counts['INFORMATIONAL']
         
         # Format the results
         result = {
             "security_score": round(security_score, 1),
             "severity_distribution": severity_counts,
             "total_findings": total_findings,
+            "high_priority_findings": high_priority_findings,
+            "low_priority_findings": low_priority_findings,
             "standards_enabled": len(standards),
+            "calculation_method": "Weighted severity score (CRITICAL=10, HIGH=5, MEDIUM=3, LOW=1, INFO=0)",
             "standards": [{
-                "name": standard.get('StandardsArn', '').split('/')[-1],
-                "status": standard.get('StandardsStatus', 'Unknown')
+                "name": standard.get('StandardsArn', '').split('/')[-1] if standard.get('StandardsArn') else 'Unknown',
+                "status": standard.get('StandardsStatus', 'Unknown'),
+                "subscription_arn": standard.get('StandardsSubscriptionArn', 'Unknown')[:50] + '...' if standard.get('StandardsSubscriptionArn') else 'Unknown'  # Truncate for readability
             } for standard in standards]
         }
         
