@@ -164,19 +164,18 @@ This policy provides comprehensive read-only access to AWS security services and
 
 ## Quick Start
 
-1. **Install Dependencies**
+1. **Clone the repo**
    ```bash
    git clone https://github.com/groovyBugify/aws-security-mcp.git
-   cd aws-security-mcp
-   uv pip install -r requirements.txt
    ```
 
 2. **Configure AWS Credentials**: This step is optional if you already have configured AWS Credentials on your env. For example if you are running this MCP server on EC2 or ECS Service, the MCP Server will automatically fetch relevant Credentials, based on the env the MCP Server is running on.
 
 
-3. **Start the Server**
+3. **Start the Server**: You can configure your necessary 
    ```bash
-   python3 aws_security_mcp/main.py sse
+   chmod +x run_aws_security.sh
+   ./run_aws_security.sh sse
    ```
 
 4. **Configure MCP Client**
@@ -202,7 +201,7 @@ This policy provides comprehensive read-only access to AWS security services and
 
 ### YAML Configuration
 
-Create or edit `config.yaml` in the project root:
+Edit `config.yaml` in the project root according to your needs:
 
 ```yaml
 aws:
@@ -235,7 +234,7 @@ export AWS_DEFAULT_REGION=eu-west-1
 ### Basic Infrastructure Queries
 
 ```
-Query: "List all EC2 instances in production accounts and perform a threat modelling of all these running instances."
+Query: "Can you share a list of running ec2 instances?"
 
 Query: "Share all the secrets stored on env variables of Lambda functions, and share a list of functions for remediating this issue."
 
