@@ -5,7 +5,6 @@
 .aws/
 aws_config.json
 aws_settings.json
-*credentials*
 *.pem
 *.key
 *.crt
@@ -117,4 +116,4 @@ secrets.json
 .pyenv
 .python-version
 uv.lock
-.cursor
+.cursor/
