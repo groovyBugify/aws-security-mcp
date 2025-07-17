@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/groovybugify-aws-security-mcp-badge.png)](https://mseep.ai/app/groovybugify-aws-security-mcp)
+
 # AWS Security MCP
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
