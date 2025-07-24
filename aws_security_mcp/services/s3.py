@@ -469,19 +469,15 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
     try:
         logger.debug(f"Checking public access for bucket: {bucket_name}")
         
-        # Check account-level public access block settings first
+        # Store account-level public access block settings for context
+        # NOTE: Account-level blocks don't completely prevent public access - they affect NEW policies/ACLs
+        # but existing public configurations may still make buckets accessible
         if account_public_access_block:
             block_config = account_public_access_block.get('PublicAccessBlockConfiguration', {})
-            all_blocked = (block_config.get('BlockPublicAcls', False) and 
-                          block_config.get('IgnorePublicAcls', False) and
-                          block_config.get('BlockPublicPolicy', False) and
-                          block_config.get('RestrictPublicBuckets', False))
-            
-            if all_blocked:
-                # If account-level blocks all public access, the bucket cannot be public
-                logger.debug(f"Bucket {bucket_name} protected by account-level public access blocks")
-                assessment['account_level_blocks'] = block_config
-                return False, assessment
+            assessment['account_level_blocks'] = block_config
+            logger.debug(f"Account-level public access blocks: {block_config}")
+        else:
+            logger.debug(f"No account-level public access blocks configured")
         
         # Get bucket-level public access block configuration
         try:
@@ -503,7 +499,8 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
             
             assessment['public_access_block'] = public_access_block
             
-            # If bucket-level blocks all public access, the bucket cannot be public
+            # If bucket-level blocks ALL public access settings, the bucket should not be public
+            # However, we still check ACL/policy as there could be race conditions or misconfigurations
             if public_access_block:
                 all_blocked = (public_access_block.get('BlockPublicAcls', False) and 
                               public_access_block.get('IgnorePublicAcls', False) and
@@ -511,8 +508,13 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
                               public_access_block.get('RestrictPublicBuckets', False))
                 
                 if all_blocked:
-                    logger.debug(f"Bucket {bucket_name} protected by bucket-level public access blocks")
-                    return False, assessment
+                    logger.debug(f"Bucket {bucket_name} has all public access blocks enabled - should not be public")
+                    # Continue checking anyway to detect any misconfigurations
+                    assessment['bucket_fully_blocked'] = True
+                else:
+                    assessment['bucket_fully_blocked'] = False
+            else:
+                assessment['bucket_fully_blocked'] = False
                     
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
@@ -603,8 +605,49 @@ def is_bucket_public(bucket_name: str, account_public_access_block: Optional[Dic
         is_public = assessment['acl_public'] or assessment['policy_public']
         assessment['is_public'] = is_public
         
+        # Check for critical misconfigurations: public bucket despite protection settings
+        account_blocks = assessment.get('account_level_blocks', {})
+        bucket_fully_blocked = assessment.get('bucket_fully_blocked', False)
+        
         if is_public:
-            logger.info(f"Bucket {bucket_name} is PUBLIC - ACL: {assessment['acl_public']}, Policy: {assessment['policy_public']}")
+            assessment['critical_misconfiguration'] = False
+            assessment['misconfiguration_reason'] = []
+            
+            # Check bucket-level misconfiguration (highest priority)
+            if bucket_fully_blocked:
+                assessment['critical_misconfiguration'] = True
+                assessment['misconfiguration_reason'].append(
+                    "Bucket is public despite having ALL public access blocks enabled at bucket level"
+                )
+                logger.error(f"CRITICAL: Bucket {bucket_name} is PUBLIC despite full bucket-level blocks!")
+            
+            # Check account-level misconfiguration
+            elif account_blocks:
+                should_be_blocked_acl = account_blocks.get('BlockPublicAcls') and assessment['acl_public']
+                should_be_blocked_policy = account_blocks.get('BlockPublicPolicy') and assessment['policy_public']
+                
+                if should_be_blocked_acl or should_be_blocked_policy:
+                    assessment['critical_misconfiguration'] = True
+                    
+                    if should_be_blocked_acl:
+                        assessment['misconfiguration_reason'].append(
+                            "Public ACL exists despite account-level BlockPublicAcls setting"
+                        )
+                    if should_be_blocked_policy:
+                        assessment['misconfiguration_reason'].append(
+                            "Public policy exists despite account-level BlockPublicPolicy setting"
+                        )
+                    
+                    logger.warning(f"CRITICAL: Bucket {bucket_name} is PUBLIC despite account-level blocks! "
+                                 f"Reasons: {assessment['misconfiguration_reason']}")
+        else:
+            assessment['critical_misconfiguration'] = False
+        
+        if is_public:
+            log_level = logger.warning if assessment.get('critical_misconfiguration') else logger.info
+            log_level(f"Bucket {bucket_name} is PUBLIC - ACL: {assessment['acl_public']}, "
+                     f"Policy: {assessment['policy_public']}, "
+                     f"Critical: {assessment.get('critical_misconfiguration', False)}")
         else:
             logger.debug(f"Bucket {bucket_name} is not public")
         
@@ -636,28 +679,13 @@ def find_public_buckets(max_workers: int = 10, session_context: Optional[str] = 
         logger.debug("Getting account-level public access block settings...")
         account_public_access_block = get_account_public_access_block(session_context)
         
-        # Check if account-level blocks prevent public access entirely
+        # Store account-level blocks for context - they don't completely prevent public access
+        # Account-level blocks affect NEW configurations but existing public configs may remain
         if account_public_access_block:
             block_config = account_public_access_block.get('PublicAccessBlockConfiguration', {})
-            all_blocked = (block_config.get('BlockPublicAcls', False) and 
-                           block_config.get('IgnorePublicAcls', False) and
-                           block_config.get('BlockPublicPolicy', False) and
-                           block_config.get('RestrictPublicBuckets', False))
-            
-            if all_blocked:
-                logger.info("Account-level public access blocks prevent any buckets from being public")
-                # Just count buckets for reporting
-                all_buckets = list_buckets(session_context)
-                total_buckets = len(all_buckets)
-                return {
-                    'total_buckets': total_buckets,
-                    'public_buckets_count': 0,
-                    'public_buckets': [],
-                    'account_public_access_block': account_public_access_block,
-                    'bucket_assessments': {},
-                    'scan_timestamp': datetime.now().isoformat(),
-                    'scan_time_seconds': (datetime.now() - start_time).total_seconds()
-                }
+            logger.info(f"Account-level public access blocks configured: {block_config}")
+        else:
+            logger.info("No account-level public access blocks configured")
         
         # List all buckets
         logger.debug("Listing all S3 buckets...")

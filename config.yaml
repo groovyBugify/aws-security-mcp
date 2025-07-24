@@ -12,7 +12,7 @@
 # AWS Configuration
 aws:
   # AWS region for API calls (can be overridden by AWS_REGION or AWS_DEFAULT_REGION env vars)
-  region: "ap-south-1"
+  region: "us-east-1"
   
   # AWS profile to use (can be overridden by AWS_PROFILE env var)
   # Leave empty to use default credential resolution
@@ -57,7 +57,7 @@ athena:
   # Default S3 bucket for Athena query results
   # IMPORTANT: This bucket must exist and your MCP server must have read/write access
   # Format: s3://your-athena-results-bucket/path/ (must end with /)
-  default_output_location: "s3://{your_athena_results_bucket_name}/"
+  default_output_location: "s3://your-athena-results-bucket/"
   
   # Default workgroup for Athena queries
   default_workgroup: "primary"

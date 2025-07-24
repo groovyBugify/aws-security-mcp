@@ -38,7 +38,7 @@ def load_yaml_config() -> Dict[str, Any]:
     logging.getLogger(__name__).warning("No config.yaml found, using minimal built-in defaults")
     return {
         "aws": {
-            "region": "ap-south-1",
+            "region": "us-east-1",
             "profile": None
         },
         "server": {

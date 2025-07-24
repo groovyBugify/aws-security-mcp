@@ -204,10 +204,35 @@ def calculate_security_rating(bucket_details: Dict[str, Any]) -> Dict[str, Any]:
         else:
             rating = 'critical'
         
-        # If public via ACL or policy, cannot be better than poor
+        # If public via ACL or policy, assess severity based on account-level blocks
         if has_public_acl or has_public_policy:
-            if rating in ['excellent', 'good', 'fair']:
-                rating = 'poor'
+            # Check if there are account-level blocks that should have prevented this
+            account_block = bucket_details.get('account_public_access_block', {})
+            if account_block:
+                account_config = account_block.get('PublicAccessBlockConfiguration', {})
+                
+                # Critical: public despite account-level blocks
+                should_be_blocked = (
+                    (has_public_acl and account_config.get('BlockPublicAcls', False)) or
+                    (has_public_policy and account_config.get('BlockPublicPolicy', False))
+                )
+                
+                if should_be_blocked:
+                    rating = 'critical'
+                    score = min(score, 20)  # Force very low score
+                    issues.append({
+                        'severity': 'critical',
+                        'issue': 'Bucket is public despite account-level public access blocks - indicates misconfiguration',
+                        'recommendation': 'Review bucket configuration and account-level settings for conflicts'
+                    })
+                else:
+                    # Public but not blocked by account settings
+                    if rating in ['excellent', 'good', 'fair']:
+                        rating = 'poor'
+            else:
+                # Public with no account-level protection
+                if rating in ['excellent', 'good', 'fair']:
+                    rating = 'poor'
         
         return {
             'score': score,
@@ -367,18 +392,32 @@ def format_public_buckets_assessment(assessment: Dict[str, Any]) -> Dict[str, An
         account_block = assessment.get('account_public_access_block', {})
         bucket_assessments = assessment.get('bucket_assessments', {})
         
-        # Format public buckets
+        # Format public buckets with enhanced assessment details
         formatted_public_buckets = []
+        critical_misconfigurations = 0
+        
         for bucket in public_buckets:
             bucket_name = bucket.get('Name')
             bucket_assessment = bucket_assessments.get(bucket_name, {})
             
+            # Extract public access reasons
+            public_reasons = []
+            if bucket_assessment.get('acl_public'):
+                public_reasons.append('Public ACL grants')
+            if bucket_assessment.get('policy_public'):
+                public_reasons.append('Public bucket policy')
+            
             formatted_bucket = {
                 'name': bucket_name,
                 'created': bucket.get('CreationDate', '').isoformat() if bucket.get('CreationDate') else None,
-                'reasons': bucket_assessment.get('reasons', []),
-                'details': bucket_assessment.get('details', {})
+                'public_via': public_reasons,
+                'is_critical_misconfiguration': bucket_assessment.get('critical_misconfiguration', False),
+                'misconfiguration_reasons': bucket_assessment.get('misconfiguration_reason', []),
+                'errors': bucket_assessment.get('errors', [])
             }
+            
+            if bucket_assessment.get('critical_misconfiguration'):
+                critical_misconfigurations += 1
             
             formatted_public_buckets.append(formatted_bucket)
         
@@ -393,17 +432,22 @@ def format_public_buckets_assessment(assessment: Dict[str, Any]) -> Dict[str, An
                 'restrict_public_buckets': block_config.get('RestrictPublicBuckets', False)
             }
         
-        # Generate risk assessment
+        # Generate enhanced risk assessment including critical misconfigurations
         risk_assessment = {}
         if public_buckets_count == 0:
             risk_assessment = {
                 'level': 'low',
-                'summary': 'No public S3 buckets detected in the account'
+                'summary': 'No public S3 buckets detected in the account',
+                'critical_misconfigurations': 0
             }
         else:
             public_percentage = (public_buckets_count / total_buckets) * 100 if total_buckets > 0 else 0
             
-            if public_percentage > 10 or public_buckets_count > 5:
+            # Escalate risk level if there are critical misconfigurations
+            if critical_misconfigurations > 0:
+                risk_level = 'critical'
+                summary = f'CRITICAL: {critical_misconfigurations} public buckets despite account-level blocks, {public_buckets_count} total public ({public_percentage:.1f}%)'
+            elif public_percentage > 10 or public_buckets_count > 5:
                 risk_level = 'critical'
                 summary = f'High number of public buckets: {public_buckets_count} ({public_percentage:.1f}%)'
             elif public_buckets_count > 0:
@@ -412,7 +456,8 @@ def format_public_buckets_assessment(assessment: Dict[str, Any]) -> Dict[str, An
             
             risk_assessment = {
                 'level': risk_level,
-                'summary': summary
+                'summary': summary,
+                'critical_misconfigurations': critical_misconfigurations
             }
         
         # Compile formatted assessment
