@@ -71,6 +71,7 @@ For advanced log analysis capabilities, additional permissions are required:
         "athena:GetQueryExecution",
         "athena:GetQueryResults",
         "athena:GetWorkGroup",
+        "athena:GetTableMetadata",
         "athena:ListQueryExecutions",
         "athena:StartQueryExecution",
         "athena:GetQueryResultsStream",
