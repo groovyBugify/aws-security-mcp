@@ -55,11 +55,15 @@ def load_yaml_config() -> Dict[str, Any]:
         "cross_account": {
             "role_name": "aws-security-mcp-cross-account-access",
             "session_name": "aws-security-mcp-session",
-            "session_duration_seconds": 3600,
-            "refresh_threshold_minutes": 5,
+            "session_duration_seconds": 14400,
+            "refresh_threshold_minutes": 30,
             "auto_setup_on_startup": True,
             "auto_refresh_enabled": True,
-            "max_concurrent_assumptions": 5
+            "max_concurrent_assumptions": 50,
+            "connection_pool_size": 100,
+            "retry_max_attempts": 3,
+            "retry_backoff_factor": 1.5,
+            "progress_update_interval": 10
         }
     }
 
@@ -190,7 +194,19 @@ class CrossAccountConfig(BaseModel):
         description="Automatically refresh expiring sessions"
     )
     max_concurrent_assumptions: int = Field(
-        description="Maximum number of concurrent role assumptions"
+        description="Maximum number of concurrent role assumptions (0 = unlimited)"
+    )
+    connection_pool_size: int = Field(
+        description="Size of boto3 connection pool for STS client"
+    )
+    retry_max_attempts: int = Field(
+        description="Maximum retry attempts for failed assume role operations"
+    )
+    retry_backoff_factor: float = Field(
+        description="Exponential backoff factor for retries (seconds)"
+    )
+    progress_update_interval: int = Field(
+        description="Update progress every N accounts processed (0 = every account)"
     )
 
 class AthenaConfig(BaseModel):
@@ -320,6 +336,10 @@ def load_config() -> AppConfig:
         "auto_setup_on_startup": _parse_bool(os.getenv("MCP_AUTO_SETUP_SESSIONS")) if os.getenv("MCP_AUTO_SETUP_SESSIONS") else cross_account_yaml.get("auto_setup_on_startup"),
         "auto_refresh_enabled": _parse_bool(os.getenv("MCP_AUTO_REFRESH_ENABLED")) if os.getenv("MCP_AUTO_REFRESH_ENABLED") else cross_account_yaml.get("auto_refresh_enabled"),
         "max_concurrent_assumptions": int(os.getenv("MCP_MAX_CONCURRENT_ASSUMPTIONS") or cross_account_yaml.get("max_concurrent_assumptions")),
+        "connection_pool_size": int(os.getenv("MCP_CONNECTION_POOL_SIZE") or cross_account_yaml.get("connection_pool_size")),
+        "retry_max_attempts": int(os.getenv("MCP_RETRY_MAX_ATTEMPTS") or cross_account_yaml.get("retry_max_attempts")),
+        "retry_backoff_factor": float(os.getenv("MCP_RETRY_BACKOFF_FACTOR") or cross_account_yaml.get("retry_backoff_factor")),
+        "progress_update_interval": int(os.getenv("MCP_PROGRESS_UPDATE_INTERVAL") or cross_account_yaml.get("progress_update_interval")),
     }
     
     # Athena configuration - YAML defaults with environment overrides

@@ -1,67 +1,48 @@
-# AWS Security MCP Configuration
-# 
-# *** SINGLE SOURCE OF TRUTH FOR ALL DEFAULT VALUES ***
-# 
-# This file contains all configuration settings and default values for the AWS Security MCP server.
-# The Python code contains NO hardcoded defaults - everything comes from this YAML file.
-# 
-# Environment variables always override these values when set.
-# Sensitive credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN) 
-# should ALWAYS be set as environment variables for security (never in this file).
-
 # AWS Configuration
 aws:
-  # AWS region for API calls (can be overridden by AWS_REGION or AWS_DEFAULT_REGION env vars)
   region: "us-east-1"
-  
-  # AWS profile to use (can be overridden by AWS_PROFILE env var)
-  # Leave empty to use default credential resolution
   profile: null
 
 # MCP Server Configuration  
 server:
-  # Server host and port
   host: "127.0.0.1"
   port: 8000
   
-  # Logging configuration - CUSTOMIZE FOR YOUR NEEDS
-  log_level: "info"        # debug, info, warning, error, critical
-  minimal_logging: false      # Ultra-minimal output mode for production
-  startup_quiet: false         # Suppress detailed startup logging (RECOMMENDED)
-  tool_quiet: false           # Suppress tool execution logging (RECOMMENDED)
+  # Logging configuration 
+  log_level: "info"        
+  minimal_logging: false      
+  startup_quiet: false         
+  tool_quiet: false           
   
   # Development settings
-  debug: true               # Enable debug mode
+  debug: true               
   
   # Performance settings
-  max_concurrent_requests: 10    # Maximum concurrent AWS API requests
-  client_cache_ttl: 3600        # AWS client cache TTL in seconds
+  max_concurrent_requests: 10    
+  client_cache_ttl: 3600       
 
 # Cross-Account Access Configuration
 cross_account:
-  # Role configuration
+  
   role_name: "aws-security-mcp-cross-account-access"
   session_name: "aws-security-mcp-session" 
-  session_duration_seconds: 3600        # 1 hour
-  refresh_threshold_minutes: 10         # Refresh when < 10 minutes remaining
+  session_duration_seconds: 3600        # 1 hour (max for SSO role chaining)
+  refresh_threshold_minutes: 15         
   
   # Automation settings
-  auto_setup_on_startup: true          # Auto-discover and setup sessions on startup
-  auto_refresh_enabled: true           # Auto-refresh expiring sessions
+  auto_setup_on_startup: true          
+  auto_refresh_enabled: true           
   
   # Performance settings  
-  max_concurrent_assumptions: 5        # Max concurrent role assumptions
+  max_concurrent_assumptions: 50       
+  connection_pool_size: 100            
+  retry_max_attempts: 3                
+  retry_backoff_factor: 1.5            
+  progress_update_interval: 10         
 
 # Athena Configuration
 athena:
-  # Default S3 bucket for Athena query results
-  # IMPORTANT: This bucket must exist and your MCP server must have read/write access
-  # Format: s3://your-athena-results-bucket/path/ (must end with /)
   default_output_location: "s3://your-athena-results-bucket/"
-  
-  # Default workgroup for Athena queries
   default_workgroup: "primary"
-  
-  # Default catalog name (usually AwsDataCatalog)
   default_catalog: "AwsDataCatalog"
 

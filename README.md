@@ -116,7 +116,8 @@ For advanced log analysis capabilities, additional permissions are required:
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
-        "s3:ListBucket"
+        "s3:ListBucket",
+        "s3:PutObject"
       ],
       "Resource": [
         "arn:aws:s3:::your-athena-results-bucket/*",
@@ -157,28 +158,47 @@ This policy provides comprehensive read-only access to AWS security services and
 
 #### Important Notes
 
+- It's best to use this MCP Server with Claude Desktop Pro/Max Plan or any other platform that allows you to deal with token size greater than 100,000
 - Replace bucket names in the S3 permissions with your actual CloudTrail, VPC Flow Logs, and Athena results bucket names
 - The SecurityAudit policy is **mandatory** for basic AWS Security MCP functionality
 - Athena integration permissions are optional and only required for advanced log analysis features
 - All permissions follow the principle of least privilege with read-only access where possible
 
-## Quick Start
+## Quick Start ~ local setup
 
-1. **Clone the repo**
+1. **Update config.yml**
+  ```
+  aws:
+    region: "us-east-1"
+    profile: {profileName}
+    .
+    .
+    .
+  ```
+2. Configure your AWS Credentials via ~ local setup
+  - aws sso
+    ```bash
+    $ aws configure sso
+    SSO Session Name - email@example.com
+    URL - https://yourDomain.awsapps.com/start/#
+    Region - us-east-1
+    ```
+  - env variabls
+    ```bash
+    export AWS_ACCESS_KEY_ID=
+    export export AWS_SECRET_ACCESS_KEY=
+    export export AWS_SESSION_TOKEN=
+    ```
+
+3. **Run the following commands**
    ```bash
    git clone https://github.com/groovyBugify/aws-security-mcp.git
+   uv venv
+   source .venv/bin/activate
+   uv pip install -r requirements.txt
    ```
 
-2. **Configure AWS Credentials**: This step is optional if you already have configured AWS Credentials on your env. For example if you are running this MCP server on EC2 or ECS Service, the MCP Server will automatically fetch relevant Credentials, based on the env the MCP Server is running on.
-
-
-3. **Start the Server**: You can configure your necessary 
-   ```bash
-   chmod +x run_aws_security.sh
-   ./run_aws_security.sh sse
-   ```
-
-4. **Configure MCP Client**
+3. **Configure MCP Client**
    ```bash
    # Install mcp-proxy
    uv tool install mcp-proxy
@@ -192,6 +212,56 @@ This policy provides comprehensive read-only access to AWS security services and
        "aws-security": {
          "command": "/path/to/mcp-proxy",
          "args": ["http://localhost:8000/sse"]
+       }
+     }
+   }
+   ```
+
+## Quick Start ~ as AWS ECS Service
+1. **Login to AWS ECR**
+  ```bash
+  $ aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin {accountID}.dkr.ecr.{region}.amazonaws.com
+  ```
+2. **Create ECR Repo**
+  ```bash
+  $ aws ecr create-repository --repository-name aws-security-mcp --region {region}
+  ```
+3. **Build Docker Image**
+  ```bash
+  $ cd aws-security-mcp/
+  $ docker buildx build --platform linux/amd64 -t aws-security-mcp .
+  $ docker tag aws-security-mcp:latest {accountID}.dkr.ecr.{region}.amazonaws.com/aws-security-mcp:latest
+  $ docker push {accountID}.dkr.ecr.{region}.amazonaws.com/aws-security-mcp:latest
+  ```
+4. **Deploying as AWS ECS Service**
+   - Create a Task Definition with "2048" CPU and "4096" Memory, this is optional, you can choose any values
+   - Configure the Task definition to do port mapping for port 8000
+   - Create ECS Task Role with the following permissions
+     - SecurityAudit IAM Policy
+     - Athena Access (Policy mentioned above)
+     - STS Assume Role permissions to assume cross account roles
+   - Create ECS Task Execution Role with basic permissions
+   - Once the Task Definition is completed. 
+   - Create an AWS ECS Service using the Task definition
+     - You can configure Load Balancer as well
+     - Make Sure to turn off the Stickness Session on Load Balancers
+   - Register the ALB's taget group and listeners for port 80/443 -> ECS Service(8000)
+   - Register the ALB for Route53 domain.
+
+5. **Configure MCP Client**
+   ```bash
+   # Install mcp-proxy
+   uv tool install mcp-proxy
+   
+   # Check location of mcp-proxy
+   which mcp-proxy
+
+   # Add to Claude Desktop config
+   {
+     "mcpServers": {
+       "aws-security": {
+         "command": "/path/to/mcp-proxy",
+         "args": ["http://{alb}/sse"]
        }
      }
    }

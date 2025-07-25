@@ -7,11 +7,15 @@ assuming roles, storing sessions, and automatically refreshing credentials.
 import asyncio
 import logging
 import re
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import json
 
 from botocore.exceptions import ClientError
+from botocore.config import Config
 import boto3
 
 from aws_security_mcp.config import config
@@ -26,8 +30,58 @@ _session_metadata: Dict[str, Dict[str, Any]] = {}
 # Role name to assume in target accounts
 CROSS_ACCOUNT_ROLE_NAME = "aws-security-mcp-cross-account-access"
 SESSION_NAME = "aws-security-mcp-session"
-SESSION_DURATION_SECONDS = 3600  # 1 hour
-REFRESH_THRESHOLD_MINUTES = 10   # Refresh when less than 10 minutes remaining
+# Note: Session duration is now configured in config.yaml (cross_account.session_duration_seconds)
+
+# Shared STS client with connection pooling
+_sts_client = None
+_client_lock = threading.Lock()
+
+class ThreadSafeCounter:
+    """Thread-safe counter for tracking failures."""
+    def __init__(self):
+        self._value = 0
+        self._lock = threading.Lock()
+    
+    def get_and_increment(self):
+        with self._lock:
+            current = self._value
+            self._value += 1
+            return current
+    
+    def reset(self):
+        with self._lock:
+            self._value = 0
+
+# Global counter for failed account logging
+failed_account_counter = ThreadSafeCounter()
+
+def get_optimized_sts_client():
+    """Get a shared STS client with connection pooling and retry configuration."""
+    global _sts_client
+    
+    if _sts_client is None:
+        with _client_lock:
+            if _sts_client is None:
+                # Create boto3 config with connection pooling and retry logic
+                boto_config = Config(
+                    max_pool_connections=config.cross_account.connection_pool_size,
+                    retries={
+                        'max_attempts': config.cross_account.retry_max_attempts,
+                        'mode': 'adaptive'
+                    },
+                    region_name=config.aws.aws_region
+                )
+                
+                # Create optimized STS client
+                if config.aws.has_profile:
+                    session = boto3.Session(profile_name=config.aws.aws_profile)
+                    _sts_client = session.client('sts', config=boto_config)
+                else:
+                    _sts_client = boto3.client('sts', config=boto_config)
+                
+                logger.debug(f"Created optimized STS client with {config.cross_account.connection_pool_size} connection pool")
+    
+    return _sts_client
 
 def create_progress_bar(current: int, total: int, width: Optional[int] = None, fill_char: str = "█", empty_char: str = "░") -> str:
     """Create a visual progress bar.
@@ -85,7 +139,7 @@ class CredentialSession:
             return True
         
         now = datetime.now(timezone.utc)
-        threshold = now + timedelta(minutes=REFRESH_THRESHOLD_MINUTES)
+        threshold = now + timedelta(minutes=config.cross_account.refresh_threshold_minutes)
         return self.expiration <= threshold
     
     def get_client(self, service_name: str):
@@ -153,8 +207,8 @@ def get_session_info() -> Dict[str, Dict[str, Any]]:
     
     return session_info
 
-async def discover_organization_accounts() -> Dict[str, Any]:
-    """Discover all accounts in the AWS organization.
+def discover_organization_accounts_sync() -> Dict[str, Any]:
+    """Discover all accounts in the AWS organization synchronously.
     
     Returns:
         Dict containing organization accounts or error information
@@ -215,8 +269,20 @@ async def discover_organization_accounts() -> Dict[str, Any]:
                 "accounts": []
             }
 
-async def assume_cross_account_role(account_id: str, account_name: str) -> Dict[str, Any]:
-    """Assume cross-account role in target account.
+async def discover_organization_accounts() -> Dict[str, Any]:
+    """Discover all accounts in the AWS organization (async wrapper).
+    
+    Returns:
+        Dict containing organization accounts or error information
+    """
+    import asyncio
+    
+    # Run the synchronous version in a thread to avoid blocking
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, discover_organization_accounts_sync)
+
+def assume_cross_account_role_sync(account_id: str, account_name: str) -> Dict[str, Any]:
+    """Assume cross-account role in target account with retry logic.
     
     Args:
         account_id: Target AWS account ID
@@ -225,60 +291,100 @@ async def assume_cross_account_role(account_id: str, account_name: str) -> Dict[
     Returns:
         Dict containing assumed role credentials or error information
     """
-    try:
-        sts_client = get_client('sts')
-        
-        # Construct role ARN
-        role_arn = f"arn:aws:iam::{account_id}:role/{CROSS_ACCOUNT_ROLE_NAME}"
-        
-        # Assume role
-        response = sts_client.assume_role(
-            RoleArn=role_arn,
-            RoleSessionName=SESSION_NAME,
-            DurationSeconds=SESSION_DURATION_SECONDS
-        )
-        
-        credentials = response.get('Credentials', {})
-        expiration = credentials.get('Expiration')
-        
-        # Convert expiration to UTC if needed
-        if expiration and expiration.tzinfo is None:
-            expiration = expiration.replace(tzinfo=timezone.utc)
-        
-        # Only log at debug level for individual accounts
-        logger.debug(f"Successfully assumed role in account {account_id} ({account_name})")
-        
-        return {
-            "success": True,
-            "account_id": account_id,
-            "account_name": account_name,
-            "role_arn": role_arn,
-            "credentials": {
-                'AccessKeyId': credentials.get('AccessKeyId'),
-                'SecretAccessKey': credentials.get('SecretAccessKey'),
-                'SessionToken': credentials.get('SessionToken')
-            },
-            "expiration": expiration,
-            "assumed_role_user": response.get('AssumedRoleUser', {})
-        }
+    role_arn = f"arn:aws:iam::{account_id}:role/{CROSS_ACCOUNT_ROLE_NAME}"
     
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+    for attempt in range(config.cross_account.retry_max_attempts):
+        try:
+            sts_client = get_optimized_sts_client()
+            
+            # Assume role
+            response = sts_client.assume_role(
+                RoleArn=role_arn,
+                RoleSessionName=SESSION_NAME,
+                DurationSeconds=config.cross_account.session_duration_seconds
+            )
+            
+            credentials = response.get('Credentials', {})
+            expiration = credentials.get('Expiration')
+            
+            # Convert expiration to UTC if needed
+            if expiration and expiration.tzinfo is None:
+                expiration = expiration.replace(tzinfo=timezone.utc)
+            
+            # Only log at debug level for individual accounts
+            logger.debug(f"Successfully assumed role in account {account_id} ({account_name})")
+            
+            return {
+                "success": True,
+                "account_id": account_id,
+                "account_name": account_name,
+                "role_arn": role_arn,
+                "credentials": {
+                    'AccessKeyId': credentials.get('AccessKeyId'),
+                    'SecretAccessKey': credentials.get('SecretAccessKey'),
+                    'SessionToken': credentials.get('SessionToken')
+                },
+                "expiration": expiration,
+                "assumed_role_user": response.get('AssumedRoleUser', {})
+            }
         
-        # Only log warnings for failures, not info
-        logger.debug(f"Failed to assume role in account {account_id} ({account_name}): {str(e)}")
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            
+            # Check if this is a retryable error
+            retryable_errors = ['Throttling', 'ThrottlingException', 'RequestTimeout', 'ServiceUnavailable']
+            
+            if error_code in retryable_errors and attempt < config.cross_account.retry_max_attempts - 1:
+                # Apply exponential backoff
+                sleep_time = config.cross_account.retry_backoff_factor ** attempt
+                logger.debug(f"Retrying assume role for account {account_id} in {sleep_time:.2f}s (attempt {attempt + 1})")
+                time.sleep(sleep_time)
+                continue
+            
+            # Log first few failures at WARNING level to help diagnose issues
+            if failed_account_counter.get_and_increment() < 3:
+                logger.warning(f"Failed to assume role in account {account_id} ({account_name}): {error_code} - {str(e)}")
+            else:
+                logger.debug(f"Failed to assume role in account {account_id} ({account_name}): {str(e)}")
+            
+            return {
+                "success": False,
+                "account_id": account_id,
+                "account_name": account_name,
+                "role_arn": role_arn,
+                "error": str(e),
+                "error_code": error_code,
+                "attempts": attempt + 1
+            }
         
-        return {
-            "success": False,
-            "account_id": account_id,
-            "account_name": account_name,
-            "role_arn": f"arn:aws:iam::{account_id}:role/{CROSS_ACCOUNT_ROLE_NAME}",
-            "error": str(e),
-            "error_code": error_code
-        }
+        except Exception as e:
+            # Non-AWS errors are not retryable
+            if failed_account_counter.get_and_increment() < 3:
+                logger.warning(f"Non-retryable error assuming role in account {account_id} ({account_name}): {str(e)}")
+            else:
+                logger.debug(f"Non-retryable error assuming role in account {account_id} ({account_name}): {str(e)}")
+            return {
+                "success": False,
+                "account_id": account_id,
+                "account_name": account_name,
+                "role_arn": role_arn,
+                "error": str(e),
+                "error_code": "NonRetryableError",
+                "attempts": attempt + 1
+            }
+    
+    # Should not reach here, but just in case
+    return {
+        "success": False,
+        "account_id": account_id,
+        "account_name": account_name,
+        "role_arn": role_arn,
+        "error": "Maximum retry attempts exceeded",
+        "error_code": "MaxRetriesExceeded"
+    }
 
 async def setup_cross_account_sessions() -> Dict[str, Any]:
-    """Set up cross-account sessions for all organization accounts.
+    """Set up cross-account sessions for all organization accounts using ThreadPoolExecutor.
     
     Returns:
         Dict containing session setup results
@@ -287,8 +393,8 @@ async def setup_cross_account_sessions() -> Dict[str, Any]:
     
     logger.info("Setting up cross-account sessions...")
     
-    # First, discover organization accounts
-    accounts_result = await discover_organization_accounts()
+    # First, discover organization accounts (run synchronously since we're already optimizing for ThreadPool)
+    accounts_result = discover_organization_accounts_sync()
     
     if not accounts_result["success"]:
         return {
@@ -310,61 +416,64 @@ async def setup_cross_account_sessions() -> Dict[str, Any]:
             "accounts_processed": 0
         }
     
+    # Get current account to skip it
+    current_account = get_client('sts').get_caller_identity().get('Account')
+    
+    # Filter out current account
+    target_accounts = [acc for acc in accounts if acc.get('Id') != current_account]
+    
+    if not target_accounts:
+        return {
+            "success": True,
+            "message": "Only current account found in organization",
+            "sessions_created": 0,
+            "sessions_failed": 0,
+            "accounts_processed": len(accounts)
+        }
+    
+    total_accounts = len(target_accounts)
+    logger.info(f"Processing {total_accounts} target accounts (excluding current account)")
+    
+    # Reset failure counter for this session setup
+    global failed_account_counter
+    failed_account_counter.reset()
+    
+    # Progress tracking (thread-safe)
+    processed_accounts = 0
     successful_sessions = 0
     failed_sessions = 0
-    session_details = []
-    total_accounts = len(accounts)
-    processed_accounts = 0
+    progress_lock = threading.Lock()
     
-    # Progress tracking
-    progress_lock = asyncio.Lock()
-    
-    async def update_progress(success: bool = False, failed: bool = False):
+    def update_progress_threadsafe(success: bool = False, failed: bool = False):
         nonlocal processed_accounts, successful_sessions, failed_sessions
-        async with progress_lock:
+        with progress_lock:
             processed_accounts += 1
             if success:
                 successful_sessions += 1
             elif failed:
                 failed_sessions += 1
             
-            # Show progress bar
-            if not config.server.startup_quiet:
+            # Show progress bar at configured intervals
+            update_interval = config.cross_account.progress_update_interval
+            if (not config.server.startup_quiet and 
+                (update_interval == 0 or processed_accounts % update_interval == 0 or 
+                 processed_accounts == total_accounts)):
+                
                 progress_bar = create_progress_bar(processed_accounts, total_accounts)
                 status_text = f"{successful_sessions} successful"
                 if failed_sessions > 0:
                     status_text += f", {failed_sessions} failed"
                 
-                # Use \r to overwrite the same line
                 print(f"\rAssuming roles: {progress_bar} {processed_accounts}/{total_accounts} accounts ({status_text})", end="", flush=True)
     
-    # Show initial progress
-    if not config.server.startup_quiet:
-        progress_bar = create_progress_bar(0, total_accounts)
-        print(f"\rAssuming roles: {progress_bar} 0/{total_accounts} accounts", end="", flush=True)
-    
-    # Process accounts concurrently with rate limiting
-    semaphore = asyncio.Semaphore(5)  # Limit concurrent requests
-    
-    async def process_account(account: Dict[str, Any]) -> Dict[str, Any]:
-        async with semaphore:
-            account_id = account.get('Id')
-            account_name = account.get('Name')
-            
-            # Skip current account
-            current_account = get_client('sts').get_caller_identity().get('Account')
-            if account_id == current_account:
-                logger.debug(f"Skipping current account {account_id} ({account_name})")
-                await update_progress()
-                return {
-                    "account_id": account_id,
-                    "account_name": account_name,
-                    "status": "skipped",
-                    "reason": "current_account"
-                }
-            
+    def process_account_sync(account: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a single account synchronously."""
+        account_id = account.get('Id')
+        account_name = account.get('Name')
+        
+        try:
             # Attempt to assume role
-            assume_result = await assume_cross_account_role(account_id, account_name)
+            assume_result = assume_cross_account_role_sync(account_id, account_name)
             
             if assume_result["success"]:
                 # Create credential session
@@ -376,12 +485,13 @@ async def setup_cross_account_sessions() -> Dict[str, Any]:
                     expiration=assume_result["expiration"]
                 )
                 
-                # Store session
+                # Store session (thread-safe)
                 session_key = generate_session_key(account_id, account_name)
-                _account_sessions[session_key] = session
-                _session_metadata[session_key] = session.to_dict()
+                with progress_lock:  # Protect shared session storage
+                    _account_sessions[session_key] = session
+                    _session_metadata[session_key] = session.to_dict()
                 
-                await update_progress(success=True)
+                update_progress_threadsafe(success=True)
                 return {
                     "account_id": account_id,
                     "account_name": account_name,
@@ -390,45 +500,104 @@ async def setup_cross_account_sessions() -> Dict[str, Any]:
                     "expiration": assume_result["expiration"].isoformat() if assume_result["expiration"] else None
                 }
             else:
-                await update_progress(failed=True)
+                update_progress_threadsafe(failed=True)
                 return {
                     "account_id": account_id,
                     "account_name": account_name,
                     "status": "failed",
                     "error": assume_result.get("error", "Unknown error"),
-                    "error_code": assume_result.get("error_code", "Unknown")
+                    "error_code": assume_result.get("error_code", "Unknown"),
+                    "attempts": assume_result.get("attempts", 1)
                 }
-    
-    # Process all accounts
-    tasks = [process_account(account) for account in accounts]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Process results
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error(f"Exception during account processing: {result}")
-            failed_sessions += 1
-            continue
         
-        session_details.append(result)
+        except Exception as e:
+            logger.error(f"Exception processing account {account_id} ({account_name}): {e}")
+            update_progress_threadsafe(failed=True)
+            return {
+                "account_id": account_id,
+                "account_name": account_name,
+                "status": "failed",
+                "error": str(e),
+                "error_code": "ProcessingException"
+            }
+    
+    # Show initial progress
+    if not config.server.startup_quiet:
+        progress_bar = create_progress_bar(0, total_accounts)
+        print(f"\rAssuming roles: {progress_bar} 0/{total_accounts} accounts", end="", flush=True)
+    
+    # Determine concurrency level
+    max_workers = config.cross_account.max_concurrent_assumptions
+    if max_workers == 0:  # 0 means unlimited
+        max_workers = min(len(target_accounts), 100)  # Cap at 100 for safety
+    
+    logger.debug(f"Using ThreadPoolExecutor with {max_workers} workers")
+    
+    # Process accounts with ThreadPoolExecutor for true concurrency
+    session_details = []
+    start_time = time.time()
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_account = {
+            executor.submit(process_account_sync, account): account
+            for account in target_accounts
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_account):
+            try:
+                result = future.result()
+                session_details.append(result)
+            except Exception as e:
+                account = future_to_account[future]
+                logger.error(f"Exception in future for account {account.get('Id', 'Unknown')}: {e}")
+                session_details.append({
+                    "account_id": account.get('Id', 'Unknown'),
+                    "account_name": account.get('Name', 'Unknown'),
+                    "status": "failed",
+                    "error": str(e),
+                    "error_code": "FutureException"
+                })
     
     # Finish progress line and add final summary
     if not config.server.startup_quiet:
         print()  # New line after progress bar
-        
-        # Final consolidated summary log
+    
+    processing_time = time.time() - start_time
+    
+    # Final consolidated summary log
+    if not config.server.startup_quiet:
         if successful_sessions == 0 and failed_sessions == 0:
             logger.info("Cross-account setup complete: No accounts required role assumption")
         elif failed_sessions == 0:
-            logger.info(f"Cross-account setup complete: {successful_sessions}/{total_accounts} accounts accessible")
+            logger.info(f"Cross-account setup complete: {successful_sessions}/{total_accounts} accounts accessible in {processing_time:.2f}s")
         else:
-            logger.info(f"Cross-account setup complete: {successful_sessions} successful, {failed_sessions} failed ({total_accounts} total)")
+            logger.info(f"Cross-account setup complete: {successful_sessions} successful, {failed_sessions} failed ({total_accounts} total) in {processing_time:.2f}s")
+            
+            # Show error summary for failed attempts
+            if failed_sessions > 0:
+                error_counts = {}
+                for detail in session_details:
+                    if detail.get("status") == "failed":
+                        error_code = detail.get("error_code", "Unknown")
+                        error_counts[error_code] = error_counts.get(error_code, 0) + 1
+                
+                if error_counts:
+                    error_summary = ", ".join([f"{code}: {count}" for code, count in error_counts.items()])
+                    logger.warning(f"Common failure reasons: {error_summary}")
+        
+        if successful_sessions > 0:
+            throughput = successful_sessions / processing_time
+            logger.debug(f"Performance: {throughput:.1f} successful assumptions/second")
     
     return {
         "success": True,
         "sessions_created": successful_sessions,
         "sessions_failed": failed_sessions,
         "accounts_processed": len(accounts),
+        "processing_time_seconds": processing_time,
+        "throughput_per_second": successful_sessions / processing_time if processing_time > 0 else 0,
         "session_details": session_details,
         "active_sessions": list(_account_sessions.keys())
     }
@@ -476,7 +645,7 @@ async def refresh_expired_sessions() -> Dict[str, Any]:
             logger.debug(f"Refreshing expired session: {session_key}")
             
             # Attempt to refresh
-            assume_result = await assume_cross_account_role(
+            assume_result = assume_cross_account_role_sync(
                 session.account_id, 
                 session.account_name
             )
@@ -610,4 +779,6 @@ def clear_all_sessions() -> None:
     
     logger.info("Clearing all cross-account sessions")
     _account_sessions.clear()
-    _session_metadata.clear() 
+    _session_metadata.clear()
+
+ 
